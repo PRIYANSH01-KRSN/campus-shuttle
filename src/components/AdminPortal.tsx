@@ -135,6 +135,14 @@ export default function AdminPortal({ onLogout }: { onLogout?: () => void }) {
   const [newCaddyRoute, setNewCaddyRoute] = useState('')
   const [newCaddyStatus, setNewCaddyStatus] = useState<'OFF_DUTY' | 'IN_MAINTENANCE'>('OFF_DUTY')
 
+  // Ad Banner form states
+  const [newAdTitle, setNewAdTitle] = useState('')
+  const [newAdSponsor, setNewAdSponsor] = useState('')
+  const [newAdImageUrl, setNewAdImageUrl] = useState('')
+  const [newAdTargetUrl, setNewAdTargetUrl] = useState('')
+  const [adFormLoading, setAdFormLoading] = useState(false)
+  const [adFormError, setAdFormError] = useState<string | null>(null)
+
   // Fetch all initial data
   const fetchData = async () => {
     try {
@@ -565,6 +573,45 @@ export default function AdminPortal({ onLogout }: { onLogout?: () => void }) {
     if (!error) fetchData()
   }
 
+  // ── Ad Banner Handlers ────────────────────────────────────────────────────
+  const handleAddBanner = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newAdTitle || !newAdSponsor || !newAdImageUrl || !newAdTargetUrl) return
+    setAdFormLoading(true)
+    setAdFormError(null)
+    const { error } = await supabase.from('ad_banners').insert({
+      title: newAdTitle,
+      sponsor_name: newAdSponsor,
+      image_url: newAdImageUrl,
+      target_url: newAdTargetUrl,
+      is_active: true,
+      impressions: 0,
+      clicks: 0,
+    })
+    setAdFormLoading(false)
+    if (error) {
+      setAdFormError(error.message)
+    } else {
+      setNewAdTitle('')
+      setNewAdSponsor('')
+      setNewAdImageUrl('')
+      setNewAdTargetUrl('')
+      fetchData()
+    }
+  }
+
+  const handleToggleAdActive = async (ad: AdBanner) => {
+    const { error } = await supabase
+      .from('ad_banners')
+      .update({ is_active: !ad.is_active })
+      .eq('id', ad.id)
+    if (!error) {
+      setAdBanners((prev) =>
+        prev.map((a) => (a.id === ad.id ? { ...a, is_active: !a.is_active } : a))
+      )
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col">
       {/* Header */}
@@ -914,18 +961,30 @@ export default function AdminPortal({ onLogout }: { onLogout?: () => void }) {
                                   {ad.is_active ? 'Active' : 'Inactive'}
                                 </span>
                               </td>
-                              <td className="py-4.5 px-6 text-right">
-                                <button
-                                  onClick={async () => {
-                                    if (confirm('Delete this banner?')) {
-                                      await supabase.from('ad_banners').delete().eq('id', ad.id)
-                                      fetchData()
-                                    }
-                                  }}
-                                  className="p-1.5 bg-rose-500/10 hover:bg-rose-600 border border-rose-500/20 text-rose-400 hover:text-white rounded-lg transition-all"
-                                >
-                                  <Trash className="w-4 h-4" />
-                                </button>
+                          <td className="py-4.5 px-6 text-right">
+                                <div className="flex items-center gap-2 justify-end">
+                                  <button
+                                    onClick={() => handleToggleAdActive(ad)}
+                                    className={`py-1.5 px-3 rounded-lg text-[11px] font-semibold border transition-all ${
+                                      ad.is_active
+                                        ? 'bg-amber-500/10 hover:bg-amber-600 border-amber-500/20 text-amber-400 hover:text-white'
+                                        : 'bg-emerald-500/10 hover:bg-emerald-600 border-emerald-500/20 text-emerald-400 hover:text-white'
+                                    }`}
+                                  >
+                                    {ad.is_active ? 'Pause' : 'Activate'}
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      if (confirm('Delete this banner?')) {
+                                        await supabase.from('ad_banners').delete().eq('id', ad.id)
+                                        fetchData()
+                                      }
+                                    }}
+                                    className="p-1.5 bg-rose-500/10 hover:bg-rose-600 border border-rose-500/20 text-rose-400 hover:text-white rounded-lg transition-all"
+                                  >
+                                    <Trash className="w-4 h-4" />
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           )
@@ -1155,6 +1214,100 @@ export default function AdminPortal({ onLogout }: { onLogout?: () => void }) {
                   </div>
                 </div>
               )}
+
+              {activeTab === 'ads' && (
+                <div className="bg-slate-900 border border-slate-850 rounded-2xl p-5.5 space-y-4">
+                  <div className="flex items-center gap-2 border-b border-slate-850 pb-3">
+                    <DollarSign className="w-4 h-4 text-emerald-400" />
+                    <h3 className="font-bold text-sm text-white uppercase tracking-wider">New Ad Campaign</h3>
+                  </div>
+
+                  <form onSubmit={handleAddBanner} className="space-y-4 text-xs">
+                    <div className="space-y-1.5">
+                      <label className="text-slate-400 font-medium">Campaign Title</label>
+                      <input
+                        type="text"
+                        required
+                        value={newAdTitle}
+                        onChange={(e) => setNewAdTitle(e.target.value)}
+                        placeholder="e.g. Summer Coding Bootcamp"
+                        className="w-full bg-slate-950 border border-slate-850 rounded-xl p-3 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-teal-500 transition-colors"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-slate-400 font-medium">Sponsor / Company Name</label>
+                      <input
+                        type="text"
+                        required
+                        value={newAdSponsor}
+                        onChange={(e) => setNewAdSponsor(e.target.value)}
+                        placeholder="e.g. Acme Corp"
+                        className="w-full bg-slate-950 border border-slate-850 rounded-xl p-3 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-teal-500 transition-colors"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-slate-400 font-medium">Banner Image URL</label>
+                      <input
+                        type="url"
+                        required
+                        value={newAdImageUrl}
+                        onChange={(e) => setNewAdImageUrl(e.target.value)}
+                        placeholder="https://example.com/banner.jpg"
+                        className="w-full bg-slate-950 border border-slate-850 rounded-xl p-3 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-teal-500 transition-colors font-mono text-[11px]"
+                      />
+                      {newAdImageUrl && (
+                        <img
+                          src={newAdImageUrl}
+                          alt="Banner preview"
+                          className="w-full h-16 object-cover rounded-xl border border-slate-800 mt-1 bg-slate-950"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                        />
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-slate-400 font-medium">Click-Through URL</label>
+                      <input
+                        type="url"
+                        required
+                        value={newAdTargetUrl}
+                        onChange={(e) => setNewAdTargetUrl(e.target.value)}
+                        placeholder="https://sponsor-website.com"
+                        className="w-full bg-slate-950 border border-slate-850 rounded-xl p-3 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-teal-500 transition-colors font-mono text-[11px]"
+                      />
+                    </div>
+
+                    {adFormError && (
+                      <p className="text-rose-400 text-[11px] font-medium bg-rose-500/10 border border-rose-500/20 rounded-xl px-3 py-2">
+                        {adFormError}
+                      </p>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={adFormLoading}
+                      className="w-full py-3 bg-teal-500 hover:bg-teal-600 disabled:opacity-50 text-slate-950 font-bold rounded-xl shadow-lg transition-all flex items-center justify-center gap-2"
+                    >
+                      {adFormLoading ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Plus className="w-4 h-4" />
+                      )}
+                      {adFormLoading ? 'Saving...' : 'Launch Campaign'}
+                    </button>
+                  </form>
+
+                  <div className="border-t border-slate-850 pt-3 space-y-1">
+                    <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">Active Campaigns</p>
+                    <p className="text-[10px] text-slate-600">
+                      {adBanners.filter(a => a.is_active).length} of {adBanners.length} banners live
+                    </p>
+                  </div>
+                </div>
+              )}
+
             </div>
 
           </div>

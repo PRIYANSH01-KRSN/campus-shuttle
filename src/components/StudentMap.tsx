@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useCallback } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -119,6 +119,11 @@ export default function StudentMap({
   const tileConfig = MAP_TILES[mapTheme] || MAP_TILES.light
   const colors = getThemeColors(mapTheme)
 
+  // Keep a ref map of Leaflet Marker instances so we can imperatively open
+  // the popup after calling L.DomEvent.stopPropagation(), which otherwise
+  // blocks Leaflet's internal auto-open pipeline for child <Popup> elements.
+  const markerRefsMap = useRef<Record<string, L.Marker | null>>({})
+
   // Use campus bounds from config or fallback to SNU_CAMPUS constants
   const centerPos: [number, number] = CAMPUS_CENTER || SNU_CAMPUS.center
   const bounds = CAMPUS_BOUNDS || SNU_CAMPUS.bounds
@@ -143,7 +148,7 @@ export default function StudentMap({
   })
 
   // ── Station icon builder ────────────────────────────────────────────────
-  const getStationIcon = (
+  const getStationIcon = useCallback((
     station: Station,
     isSelected: boolean,
     routeColor: string,
@@ -162,17 +167,17 @@ export default function StudentMap({
       iconSize: size,
       iconAnchor: anchor,
     })
-  }
+  }, [])
 
   // ── Caddy / shuttle icon builder ────────────────────────────────────────
-  const getCaddyIcon = (caddy: Caddy, isStale: boolean) => {
+  const getCaddyIcon = useCallback((caddy: Caddy, isStale: boolean) => {
     return L.divIcon({
       className: '',
       html: getShuttleMarkerHTML(caddy.heading || 0, caddy.status, isStale),
       iconSize: [48, 48] as [number, number],
       iconAnchor: [24, 24] as [number, number],
     })
-  }
+  }, [])
 
   // ── Render ──────────────────────────────────────────────────────────────
   return (
@@ -201,121 +206,177 @@ export default function StudentMap({
 
         {/* Route Polyline */}
         {selectedRouteId && activeRoutePath && activeRoutePath.length > 0 && (
-          <Polyline
-            positions={activeRoutePath}
-            pathOptions={{
-              color:
-                routes.find((r) => r.id === selectedRouteId)?.color ||
-                '#2563EB',
-              weight: 5,
-              opacity: 0.9,
-              lineCap: 'round',
-              lineJoin: 'round',
-            }}
+          <MemoizedPolyline 
+            activeRoutePath={activeRoutePath} 
+            selectedRouteId={selectedRouteId} 
+            routes={routes} 
           />
         )}
 
         {/* Station Markers */}
-        {visibleStations.map((station) => {
-          const routeColor =
-            routes.find((r) => r.id === station.route_id)?.color || '#3b82f6'
-          const isSelected = selectedStationId === station.id
-
-          return (
-            <Marker
-              key={station.id}
-              position={[station.lat, station.lng]}
-              icon={getStationIcon(station, isSelected, routeColor)}
-              eventHandlers={{
-                click: (e) => {
-                  // Prevent the click from bubbling up to MapEventController
-                  // so it does not trigger the "deselect" onMapClick handler.
-                  L.DomEvent.stopPropagation(e)
-                  // Notify the parent so it can update selectedStationId and
-                  // any sidebar panel. Leaflet will also auto-open the <Popup>.
-                  onSelectStation(station)
-                },
-              }}
-            >
-              <Popup className="custom-leaflet-popup">
-                <div
-                  className={`${colors.bgCard} ${colors.text} p-2 rounded-xl border ${colors.borderAccent} font-sans min-w-[140px] text-xs shadow-md`}
-                >
-                  <div className="font-bold text-sm mb-1">{station.name}</div>
-                  <div
-                    className={`flex justify-between items-center ${colors.textSecondary} text-[10px]`}
-                  >
-                    <span>Stop {station.stop_order}</span>
-                    <span className="bg-teal-500/20 text-teal-600 dark:text-teal-400 px-1.5 py-0.5 rounded font-bold">
-                      {station.waiting_count} waiting
-                    </span>
-                  </div>
-                </div>
-              </Popup>
-            </Marker>
-          )
-        })}
+        <MemoizedStationMarkers 
+          visibleStations={visibleStations} 
+          routes={routes} 
+          selectedStationId={selectedStationId} 
+          getStationIcon={getStationIcon}
+          onSelectStation={onSelectStation}
+          colors={colors}
+          markerRefsMap={markerRefsMap}
+        />
 
         {/* Caddy Markers */}
-        {activeCaddies.map((caddy) => {
-          const lastPingTime = new Date(caddy.last_ping).getTime()
-          const staleMarkerThreshold =
-            typeof STALE_MARKER_THRESHOLD_MS !== 'undefined'
-              ? STALE_MARKER_THRESHOLD_MS
-              : 45000
-          const isStale = Date.now() - lastPingTime > staleMarkerThreshold
-          const assignedRoute = routes.find((r) => r.id === caddy.route_id)
-
-          return (
-            <Marker
-              key={caddy.id}
-              position={[caddy.current_lat!, caddy.current_lng!]}
-              icon={getCaddyIcon(caddy, isStale)}
-            >
-              <Popup className="custom-leaflet-popup">
-                <div
-                  className={`${colors.bgCard} ${colors.text} p-3 rounded-xl border ${colors.borderAccent} space-y-2 font-sans min-w-[170px] text-xs shadow-lg`}
-                >
-                  <div
-                    className={`flex justify-between items-center border-b ${colors.border} pb-1.5`}
-                  >
-                    <span className="font-bold text-sm">{caddy.name}</span>
-                    <span
-                      className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${
-                        isStale
-                          ? 'bg-rose-500/10 text-rose-500 dark:text-rose-400'
-                          : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                      }`}
-                    >
-                      {isStale ? 'Signal Lost' : 'Live'}
-                    </span>
-                  </div>
-                  <div
-                    className={`space-y-1 text-[11px] ${colors.textSecondary}`}
-                  >
-                    <div className="flex justify-between">
-                      <span>Route:</span>
-                      <span
-                        className={`font-medium ${colors.text} truncate max-w-[100px]`}
-                      >
-                        {assignedRoute ? assignedRoute.name : 'Unassigned'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Speed:</span>
-                      <span className={`font-medium ${colors.text}`}>
-                        {caddy.speed
-                          ? `${Math.round(caddy.speed)} km/h`
-                          : '0 km/h'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </Popup>
-            </Marker>
-          )
-        })}
+        <MemoizedCaddyMarkers 
+          activeCaddies={activeCaddies} 
+          routes={routes} 
+          getCaddyIcon={getCaddyIcon}
+          colors={colors}
+        />
       </MapContainer>
     </div>
   )
 }
+
+// ── Memoized Sub-components ──────────────────────────────────────────────
+
+const MemoizedPolyline = React.memo(({ activeRoutePath, selectedRouteId, routes }: any) => {
+  return (
+    <Polyline
+      positions={activeRoutePath}
+      pathOptions={{
+        color:
+          routes.find((r: any) => r.id === selectedRouteId)?.color ||
+          '#2563EB',
+        weight: 5,
+        opacity: 0.9,
+        lineCap: 'round',
+        lineJoin: 'round',
+      }}
+    />
+  )
+})
+
+const MemoizedStationMarkers = React.memo(({ visibleStations, routes, selectedStationId, getStationIcon, onSelectStation, colors, markerRefsMap }: any) => {
+  return (
+    <>
+      {visibleStations.map((station: any) => {
+        const routeColor =
+          routes.find((r: any) => r.id === station.route_id)?.color || '#3b82f6'
+        const isSelected = selectedStationId === station.id
+
+        return (
+          <Marker
+            key={station.id}
+            position={[station.lat, station.lng]}
+            icon={getStationIcon(station, isSelected, routeColor)}
+            ref={(markerInstance) => {
+              markerRefsMap.current[station.id] = markerInstance
+            }}
+            eventHandlers={{
+              click: (e) => {
+                L.DomEvent.stopPropagation(e)
+                onSelectStation(station)
+                const markerRef = markerRefsMap.current[station.id]
+                if (markerRef) {
+                  markerRef.openPopup()
+                }
+              },
+            }}
+          >
+            <Popup className="custom-leaflet-popup">
+              <div
+                className={`${colors.bgCard} ${colors.text} p-2 rounded-xl border ${colors.borderAccent} font-sans min-w-[160px] text-xs shadow-md`}
+              >
+                <div className="font-bold text-sm mb-1">
+                  {station.name || 'Unnamed Stop'}
+                </div>
+                <div
+                  className={`flex justify-between items-center ${colors.textSecondary} text-[10px]`}
+                >
+                  <span>Stop #{station.stop_order}</span>
+                  <span className="bg-teal-500/20 text-teal-600 dark:text-teal-400 px-1.5 py-0.5 rounded font-bold">
+                    {station.waiting_count ?? 0} waiting
+                  </span>
+                </div>
+              </div>
+            </Popup>
+          </Marker>
+        )
+      })}
+    </>
+  )
+}, (prev, next) => {
+  // Simple check: if lengths change or selected changes, re-render
+  if (prev.selectedStationId !== next.selectedStationId) return false;
+  if (prev.visibleStations.length !== next.visibleStations.length) return false;
+  // Deep check could be added, but this prevents unnecessary re-renders on caddy updates
+  return true;
+})
+
+const MemoizedCaddyMarkers = React.memo(({ activeCaddies, routes, getCaddyIcon, colors }: any) => {
+  return (
+    <>
+      {activeCaddies.map((caddy: any) => {
+        const lastPingTime = new Date(caddy.last_ping).getTime()
+        const staleMarkerThreshold =
+          typeof STALE_MARKER_THRESHOLD_MS !== 'undefined'
+            ? STALE_MARKER_THRESHOLD_MS
+            : 45000
+        const isStale = Date.now() - lastPingTime > staleMarkerThreshold
+        const assignedRoute = routes.find((r: any) => r.id === caddy.route_id)
+
+        return (
+          <Marker
+            key={caddy.id}
+            position={[caddy.current_lat!, caddy.current_lng!]}
+            icon={getCaddyIcon(caddy, isStale)}
+          >
+            <Popup className="custom-leaflet-popup">
+              <div
+                className={`${colors.bgCard} ${colors.text} p-3 rounded-xl border ${colors.borderAccent} space-y-2 font-sans min-w-[170px] text-xs shadow-lg`}
+              >
+                <div
+                  className={`flex justify-between items-center border-b ${colors.border} pb-1.5`}
+                >
+                  <span className="font-bold text-sm">{caddy.name}</span>
+                  <span
+                    className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${
+                      isStale
+                        ? 'bg-rose-500/10 text-rose-500 dark:text-rose-400'
+                        : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                    }`}
+                  >
+                    {isStale ? 'Signal Lost' : 'Live'}
+                  </span>
+                </div>
+                <div
+                  className={`space-y-1 text-[11px] ${colors.textSecondary}`}
+                >
+                  <div className="flex justify-between">
+                    <span>Route:</span>
+                    <span
+                      className={`font-medium ${colors.text} truncate max-w-[100px]`}
+                    >
+                      {assignedRoute ? assignedRoute.name : 'Unassigned'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Speed:</span>
+                    <span className={`font-medium ${colors.text}`}>
+                      {caddy.speed
+                        ? `${Math.round(caddy.speed)} km/h`
+                        : '0 km/h'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </Popup>
+          </Marker>
+        )
+      })}
+    </>
+  )
+}, (prev, next) => {
+  // If the stringified JSON array is exactly the same (meaning no coords/speed/status changed),
+  // don't re-render. If a single caddy moves, it will return false and re-render only the Caddy layer.
+  return JSON.stringify(prev.activeCaddies) === JSON.stringify(next.activeCaddies);
+})

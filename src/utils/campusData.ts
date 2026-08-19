@@ -48,18 +48,18 @@ export const STATIONS: Record<string, StationPreset[]> = {
   // Gate 1 Route — 6 stops
   // Loop: Gate 1 → Cluster 5 → Cluster 4 → Gir Hostel → Chilika Hostel 1B → G Block → Gate 1
   GATE_1: [
-    { name: 'Gate 1',            lat: 28.5212, lng: 77.5711, stop_order: 1 },
+    { name: 'Gate 1',            lat: 28.533180530044106, lng: 77.57664699610052, stop_order: 1 },
     { name: 'Cluster 5',         lat: 28.5225, lng: 77.5703, stop_order: 2 },
     { name: 'Cluster 4',         lat: 28.5235, lng: 77.5706, stop_order: 3 },
     { name: 'Gir Hostel',        lat: 28.5248, lng: 77.5709, stop_order: 4 },
     { name: 'Chilika Hostel 1B', lat: 28.5242, lng: 77.5731, stop_order: 5 },
-    { name: 'G Block',           lat: 28.5234, lng: 77.5746, stop_order: 6 },
+    { name: 'G Block',           lat: 28.520000, lng: 77.570000, stop_order: 6 },
   ],
 
   // Gate 2 Route — 10 stops
   // Loop: Gate 2 → Cluster 5 → Cluster 4 → Gir Hostel → Chilika Hostel 1B → D Block → C Block → B Block → A Block → Towers → Gate 2
   GATE_2: [
-    { name: 'Gate 2',            lat: 28.5298, lng: 77.5772, stop_order: 1 },
+    { name: 'Gate 2',            lat: 28.53076962815911, lng: 77.58093845170927, stop_order: 1 },
     { name: 'Cluster 5',         lat: 28.5225, lng: 77.5703, stop_order: 2 },
     { name: 'Cluster 4',         lat: 28.5235, lng: 77.5706, stop_order: 3 },
     { name: 'Gir Hostel',        lat: 28.5248, lng: 77.5709, stop_order: 4 },
@@ -78,27 +78,27 @@ export const STATIONS: Record<string, StationPreset[]> = {
 
 export const ROUTE_PATHS: Record<string, [number, number][]> = {
   GATE_1: [
-    [28.5212, 77.5711],
-    [28.5225, 77.5703],
-    [28.5235, 77.5706],
-    [28.5248, 77.5709],
-    [28.5242, 77.5731],
-    [28.5234, 77.5746],
-    [28.5212, 77.5711]
+    [28.533180530044106, 77.57664699610052], // Gate 1
+    [28.5225, 77.5703], // Cluster 5
+    [28.5235, 77.5706], // Cluster 4
+    [28.5248, 77.5709], // Gir
+    [28.5242, 77.5731], // Chilika
+    [28.520000, 77.570000], // G Block
+    [28.533180530044106, 77.57664699610052]  // Gate 1 (close loop)
   ],
 
   GATE_2: [
-    [28.5298, 77.5772],
-    [28.5225, 77.5703],
-    [28.5235, 77.5706],
-    [28.5248, 77.5709],
-    [28.5242, 77.5731],
-    [28.5254, 77.5753],
-    [28.5261, 77.5757],
-    [28.5266, 77.5763],
-    [28.5269, 77.5771],
-    [28.5298, 77.5791],
-    [28.5298, 77.5772]
+    [28.53076962815911, 77.58093845170927],  // Gate 2
+    [28.5225, 77.5703], // Cluster 5
+    [28.5235, 77.5706], // Cluster 4
+    [28.5248, 77.5709], // Gir
+    [28.5242, 77.5731], // Chilika
+    [28.5254, 77.5753], // D Block
+    [28.5261, 77.5757], // C Block
+    [28.5266, 77.5763], // B Block
+    [28.5269, 77.5771], // A Block
+    [28.5298, 77.5791], // Towers
+    [28.53076962815911, 77.58093845170927]   // Gate 2 (close loop)
   ],
 }
 

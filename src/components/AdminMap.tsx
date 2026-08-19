@@ -147,7 +147,7 @@ export default function AdminMap({
     ? stations.filter((s) => s.route_id === selectedRouteId)
     : stations
 
-  const getStationIcon = (
+  const getStationIcon = useCallback((
     station: Station,
     isSelected: boolean,
     routeColor: string
@@ -163,16 +163,16 @@ export default function AdminMap({
       iconSize: isSelected ? [36, 36] : [28, 28],
       iconAnchor: isSelected ? [18, 18] : [14, 14],
     })
-  }
+  }, [])
 
-  const getCaddyIcon = (caddy: Caddy, isStale: boolean) => {
+  const getCaddyIcon = useCallback((caddy: Caddy, isStale: boolean) => {
     return L.divIcon({
       className: '',
       html: getShuttleMarkerHTML(caddy.heading || 0, caddy.status, isStale),
       iconSize: [48, 48],
       iconAnchor: [24, 24],
     })
-  }
+  }, [])
 
   const validRoutePath = Array.isArray(activeRoutePath) ? activeRoutePath : []
 
@@ -202,16 +202,10 @@ export default function AdminMap({
 
         {/* Route Polyline */}
         {validRoutePath.length > 0 && (
-          <Polyline
-            positions={validRoutePath}
-            pathOptions={{
-              color:
-                routes.find((r) => r.id === selectedRouteId)?.color || '#2563EB',
-              weight: 5,
-              opacity: 0.85,
-              lineCap: 'round',
-              lineJoin: 'round',
-            }}
+          <MemoizedPolyline 
+            validRoutePath={validRoutePath} 
+            selectedRouteId={selectedRouteId} 
+            routes={routes} 
           />
         )}
 
@@ -231,124 +225,179 @@ export default function AdminMap({
           ))}
 
         {/* Campus Station Markers */}
-        {visibleStations.map((station) => {
-          const routeColor =
-            routes.find((r) => r.id === station.route_id)?.color || '#3b82f6'
-          const isSelected = selectedStationId === station.id
-
-          return (
-            <Marker
-              key={station.id}
-              position={[station.lat, station.lng]}
-              draggable={isStudioMode}
-              icon={getStationIcon(station, isSelected, routeColor)}
-              eventHandlers={{
-                click: (e) => {
-                  onSelectStation?.(station)
-                },
-                dragend: (e) => {
-                  const marker = e.target
-                  const position = marker.getLatLng()
-                  if (onStationDragEnd) {
-                    onStationDragEnd(station.id, position.lat, position.lng)
-                  }
-                },
-              }}
-            >
-              <Popup className="custom-leaflet-popup">
-                <div
-                  className={`${colors.bgCard} ${colors.text} p-2.5 rounded-xl border ${colors.borderAccent} font-sans min-w-[150px] text-xs shadow-lg`}
-                >
-                  <div className="font-bold text-sm mb-1">{station.name}</div>
-                  <div className="flex justify-between items-center text-[10px] mb-2">
-                    <span className={colors.textSecondary}>
-                      Stop #{station.stop_order}
-                    </span>
-                    <span className="bg-teal-500/20 text-teal-600 dark:text-teal-400 px-1.5 py-0.5 rounded font-bold">
-                      {station.waiting_count || 0} waiting
-                    </span>
-                  </div>
-                  {isStudioMode && (
-                    <div className="flex items-center gap-1 text-amber-500 font-medium text-[10px] pt-1 border-t border-slate-700/30">
-                      <Move className="w-3 h-3" />
-                      <span>Drag to reposition</span>
-                    </div>
-                  )}
-                </div>
-              </Popup>
-            </Marker>
-          )
-        })}
+        <MemoizedStationMarkers 
+          visibleStations={visibleStations} 
+          routes={routes} 
+          selectedStationId={selectedStationId} 
+          isStudioMode={isStudioMode}
+          getStationIcon={getStationIcon}
+          onSelectStation={onSelectStation}
+          onStationDragEnd={onStationDragEnd}
+          colors={colors}
+        />
 
         {/* Caddy Fleet Markers */}
-        {caddies.map((caddy) => {
-          if (caddy.current_lat === null || caddy.current_lng === null) {
-            return null
-          }
-
-          const lastPingTime = new Date(caddy.last_ping).getTime()
-          const staleThreshold = STALE_MARKER_THRESHOLD_MS || 45000
-          const isStale = Date.now() - lastPingTime > staleThreshold
-          const assignedRoute = routes.find((r) => r.id === caddy.route_id)
-
-          return (
-            <Marker
-              key={caddy.id}
-              position={[caddy.current_lat, caddy.current_lng]}
-              icon={getCaddyIcon(caddy, isStale)}
-            >
-              <Popup className="custom-leaflet-popup">
-                <div
-                  className={`${colors.bgCard} ${colors.text} p-3 rounded-xl border ${colors.borderAccent} space-y-2 font-sans min-w-[180px] text-xs shadow-xl`}
-                >
-                  <div
-                    className={`flex justify-between items-center border-b ${colors.border} pb-1.5`}
-                  >
-                    <span className="font-bold text-sm">{caddy.name}</span>
-                    <span
-                      className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${
-                        isStale
-                          ? 'bg-rose-500/10 text-rose-500 dark:text-rose-400'
-                          : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                      }`}
-                    >
-                      {isStale ? 'Signal Lost' : caddy.status}
-                    </span>
-                  </div>
-                  <div
-                    className={`space-y-1 text-[11px] ${colors.textSecondary}`}
-                  >
-                    <div className="flex justify-between">
-                      <span>Route:</span>
-                      <span className={`font-medium ${colors.text}`}>
-                        {assignedRoute?.name || 'Unassigned'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Speed:</span>
-                      <span className="font-mono">
-                        {isStale ? '0' : caddy.speed} km/h
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Heading:</span>
-                      <span className="font-mono">
-                        {Math.round(caddy.heading)}°
-                      </span>
-                    </div>
-                    {isStale && (
-                      <div className="flex items-center gap-1 text-rose-500 dark:text-rose-400 font-bold mt-2 text-[10px] pt-1">
-                        <WifiOff className="w-3.5 h-3.5" />
-                        Offline ({Math.round((Date.now() - lastPingTime) / 1000)}s ago)
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </Popup>
-            </Marker>
-          )
-        })}
+        <MemoizedCaddyMarkers 
+          caddies={caddies} 
+          routes={routes} 
+          getCaddyIcon={getCaddyIcon}
+          colors={colors}
+        />
       </MapContainer>
     </div>
   )
 }
+
+// ── Memoized Sub-components ──────────────────────────────────────────────
+
+const MemoizedPolyline = React.memo(({ validRoutePath, selectedRouteId, routes }: any) => {
+  return (
+    <Polyline
+      positions={validRoutePath}
+      pathOptions={{
+        color:
+          routes.find((r: any) => r.id === selectedRouteId)?.color || '#2563EB',
+        weight: 5,
+        opacity: 0.85,
+        lineCap: 'round',
+        lineJoin: 'round',
+      }}
+    />
+  )
+})
+
+const MemoizedStationMarkers = React.memo(({ visibleStations, routes, selectedStationId, isStudioMode, getStationIcon, onSelectStation, onStationDragEnd, colors }: any) => {
+  return (
+    <>
+      {visibleStations.map((station: any) => {
+        const routeColor =
+          routes.find((r: any) => r.id === station.route_id)?.color || '#3b82f6'
+        const isSelected = selectedStationId === station.id
+
+        return (
+          <Marker
+            key={station.id}
+            position={[station.lat, station.lng]}
+            draggable={isStudioMode}
+            icon={getStationIcon(station, isSelected, routeColor)}
+            eventHandlers={{
+              click: (e) => {
+                onSelectStation?.(station)
+              },
+              dragend: (e) => {
+                const marker = e.target
+                const position = marker.getLatLng()
+                if (onStationDragEnd) {
+                  onStationDragEnd(station.id, position.lat, position.lng)
+                }
+              },
+            }}
+          >
+            <Popup className="custom-leaflet-popup">
+              <div
+                className={`${colors.bgCard} ${colors.text} p-2.5 rounded-xl border ${colors.borderAccent} font-sans min-w-[150px] text-xs shadow-lg`}
+              >
+                <div className="font-bold text-sm mb-1">{station.name}</div>
+                <div className="flex justify-between items-center text-[10px] mb-2">
+                  <span className={colors.textSecondary}>
+                    Stop #{station.stop_order}
+                  </span>
+                  <span className="bg-teal-500/20 text-teal-600 dark:text-teal-400 px-1.5 py-0.5 rounded font-bold">
+                    {station.waiting_count || 0} waiting
+                  </span>
+                </div>
+                {isStudioMode && (
+                  <div className="flex items-center gap-1 text-amber-500 font-medium text-[10px] pt-1 border-t border-slate-700/30">
+                    <Move className="w-3 h-3" />
+                    <span>Drag to reposition</span>
+                  </div>
+                )}
+              </div>
+            </Popup>
+          </Marker>
+        )
+      })}
+    </>
+  )
+}, (prev, next) => {
+  if (prev.selectedStationId !== next.selectedStationId) return false;
+  if (prev.isStudioMode !== next.isStudioMode) return false;
+  if (prev.visibleStations.length !== next.visibleStations.length) return false;
+  return true;
+})
+
+const MemoizedCaddyMarkers = React.memo(({ caddies, routes, getCaddyIcon, colors }: any) => {
+  return (
+    <>
+      {caddies.map((caddy: any) => {
+        if (caddy.current_lat === null || caddy.current_lng === null) {
+          return null
+        }
+
+        const lastPingTime = new Date(caddy.last_ping).getTime()
+        const staleThreshold = STALE_MARKER_THRESHOLD_MS || 45000
+        const isStale = Date.now() - lastPingTime > staleThreshold
+        const assignedRoute = routes.find((r: any) => r.id === caddy.route_id)
+
+        return (
+          <Marker
+            key={caddy.id}
+            position={[caddy.current_lat, caddy.current_lng]}
+            icon={getCaddyIcon(caddy, isStale)}
+          >
+            <Popup className="custom-leaflet-popup">
+              <div
+                className={`${colors.bgCard} ${colors.text} p-3 rounded-xl border ${colors.borderAccent} space-y-2 font-sans min-w-[180px] text-xs shadow-xl`}
+              >
+                <div
+                  className={`flex justify-between items-center border-b ${colors.border} pb-1.5`}
+                >
+                  <span className="font-bold text-sm">{caddy.name}</span>
+                  <span
+                    className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${
+                      isStale
+                        ? 'bg-rose-500/10 text-rose-500 dark:text-rose-400'
+                        : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                    }`}
+                  >
+                    {isStale ? 'Signal Lost' : caddy.status}
+                  </span>
+                </div>
+                <div
+                  className={`space-y-1 text-[11px] ${colors.textSecondary}`}
+                >
+                  <div className="flex justify-between">
+                    <span>Route:</span>
+                    <span className={`font-medium ${colors.text}`}>
+                      {assignedRoute?.name || 'Unassigned'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Speed:</span>
+                    <span className="font-mono">
+                      {isStale ? '0' : caddy.speed} km/h
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Heading:</span>
+                    <span className="font-mono">
+                      {Math.round(caddy.heading)}°
+                    </span>
+                  </div>
+                  {isStale && (
+                    <div className="flex items-center gap-1 text-rose-500 dark:text-rose-400 font-bold mt-2 text-[10px] pt-1">
+                      <WifiOff className="w-3.5 h-3.5" />
+                      Offline ({Math.round((Date.now() - lastPingTime) / 1000)}s ago)
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Popup>
+          </Marker>
+        )
+      })}
+    </>
+  )
+}, (prev, next) => {
+  return JSON.stringify(prev.caddies) === JSON.stringify(next.caddies);
+})
