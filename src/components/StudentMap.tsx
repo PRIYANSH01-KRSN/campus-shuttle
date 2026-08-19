@@ -1,12 +1,11 @@
 'use client'
 
-import React, { useEffect } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { MapTheme, MAP_TILES, getShuttleMarkerHTML, getStationMarkerHTML, getThemeColors, SNU_CAMPUS } from '@/utils/mapConfig'
 import { CAMPUS_CENTER, CAMPUS_BOUNDS, CAMPUS_ZOOM, STALE_MARKER_THRESHOLD_MS, STALE_THRESHOLD_MS } from '@/utils/campusData'
-import { WifiOff } from 'lucide-react'
 
 interface Station {
   id: string
@@ -54,18 +53,32 @@ interface StudentMapProps {
   userLocation?: [number, number] | null
 }
 
-// Controller to bind events and ensure sharp tile rendering without clipping
-function MapEventController({ onMapClick, mapRef }: { onMapClick: () => void, mapRef: React.MutableRefObject<any> }) {
+/**
+ * MapEventController — binds the map instance to mapRef, fixes grey-tile
+ * rendering, and isolates background-tile clicks from marker click bubbling.
+ *
+ * Only calls onMapClick() when the user clicks directly on the map canvas
+ * background (leaflet-container or leaflet-zoom-animated), so marker clicks
+ * that call L.DomEvent.stopPropagation() are never mistakenly treated as
+ * "deselect" taps.
+ */
+function MapEventController({
+  onMapClick,
+  mapRef,
+}: {
+  onMapClick: () => void
+  mapRef: React.MutableRefObject<any>
+}) {
   const map = useMap()
-  
+
   useEffect(() => {
     mapRef.current = map
-    
+
     // Invalidate size immediately and with small delays to fix any grey tiles or blur
     map.invalidateSize()
     const t1 = setTimeout(() => map.invalidateSize(), 150)
     const t2 = setTimeout(() => map.invalidateSize(), 400)
-    
+
     return () => {
       clearTimeout(t1)
       clearTimeout(t2)
@@ -74,14 +87,19 @@ function MapEventController({ onMapClick, mapRef }: { onMapClick: () => void, ma
 
   useMapEvents({
     click: (e) => {
-      // Only fire general map click if clicking on the actual empty background tiles
-      if ((e.originalEvent.target as HTMLElement).classList.contains('leaflet-container') || 
-          (e.originalEvent.target as HTMLElement).classList.contains('leaflet-zoom-animated')) {
+      // Only fire the general "deselect" map click when tapping on empty
+      // background tiles — never when clicking on a marker or popup element.
+      const target = e.originalEvent.target as HTMLElement
+      const isBackgroundTile =
+        target.classList.contains('leaflet-container') ||
+        target.classList.contains('leaflet-zoom-animated')
+
+      if (isBackgroundTile) {
         onMapClick()
       }
-    }
+    },
   })
-  
+
   return null
 }
 
@@ -96,14 +114,13 @@ export default function StudentMap({
   onSelectStation,
   onMapClick,
   mapRef,
-  userLocation = null
+  userLocation = null,
 }: StudentMapProps) {
-
   const tileConfig = MAP_TILES[mapTheme] || MAP_TILES.light
   const colors = getThemeColors(mapTheme)
 
   // Use campus bounds from config or fallback to SNU_CAMPUS constants
-  const centerPos = CAMPUS_CENTER || SNU_CAMPUS.center
+  const centerPos: [number, number] = CAMPUS_CENTER || SNU_CAMPUS.center
   const bounds = CAMPUS_BOUNDS || SNU_CAMPUS.bounds
   const defaultZoom = CAMPUS_ZOOM?.initial || SNU_CAMPUS.defaultZoom || 16.5
   const minZoom = CAMPUS_ZOOM?.min || SNU_CAMPUS.minZoom || 15
@@ -111,37 +128,53 @@ export default function StudentMap({
 
   // Filter stations based on selected route
   const visibleStations = selectedRouteId
-    ? stations.filter(s => s.route_id === selectedRouteId)
+    ? stations.filter((s) => s.route_id === selectedRouteId)
     : stations
 
-  // Filter active caddies: ON_DUTY, valid coords, ping < 60s
-  const activeCaddies = caddies.filter(c => {
+  // Filter active caddies: ON_DUTY, valid coords, ping < threshold
+  const activeCaddies = caddies.filter((c) => {
     if (c.status !== 'ON_DUTY') return false
     if (c.current_lat === null || c.current_lng === null) return false
     const timeSincePing = Date.now() - new Date(c.last_ping).getTime()
-    const threshold = typeof STALE_THRESHOLD_MS !== 'undefined' ? STALE_THRESHOLD_MS : 60000
+    const threshold =
+      typeof STALE_THRESHOLD_MS !== 'undefined' ? STALE_THRESHOLD_MS : 60000
     if (timeSincePing >= threshold) return false
     return true
   })
 
-  const getStationIcon = (station: Station, isSelected: boolean, routeColor: string) => {
+  // ── Station icon builder ────────────────────────────────────────────────
+  const getStationIcon = (
+    station: Station,
+    isSelected: boolean,
+    routeColor: string,
+  ) => {
+    const size: [number, number] = isSelected ? [36, 36] : [28, 28]
+    const anchor: [number, number] = isSelected ? [18, 18] : [14, 14]
+
     return L.divIcon({
       className: '',
-      html: getStationMarkerHTML(station.stop_order, routeColor, isSelected, station.waiting_count),
-      iconSize: isSelected ? [36, 36] :,
-      iconAnchor: isSelected ? [18, 18] : [14, 14]
+      html: getStationMarkerHTML(
+        station.stop_order,
+        routeColor,
+        isSelected,
+        station.waiting_count,
+      ),
+      iconSize: size,
+      iconAnchor: anchor,
     })
   }
 
+  // ── Caddy / shuttle icon builder ────────────────────────────────────────
   const getCaddyIcon = (caddy: Caddy, isStale: boolean) => {
     return L.divIcon({
       className: '',
       html: getShuttleMarkerHTML(caddy.heading || 0, caddy.status, isStale),
-      iconSize:,
-      iconAnchor: [24, 24]
+      iconSize: [48, 48] as [number, number],
+      iconAnchor: [24, 24] as [number, number],
     })
   }
 
+  // ── Render ──────────────────────────────────────────────────────────────
   return (
     <div className={`relative w-full h-full ${colors.mapBg} map-fullscreen`}>
       <MapContainer
@@ -171,18 +204,21 @@ export default function StudentMap({
           <Polyline
             positions={activeRoutePath}
             pathOptions={{
-              color: routes.find(r => r.id === selectedRouteId)?.color || '#2563EB',
+              color:
+                routes.find((r) => r.id === selectedRouteId)?.color ||
+                '#2563EB',
               weight: 5,
               opacity: 0.9,
               lineCap: 'round',
-              lineJoin: 'round'
+              lineJoin: 'round',
             }}
           />
         )}
 
         {/* Station Markers */}
-        {visibleStations.map(station => {
-          const routeColor = routes.find(r => r.id === station.route_id)?.color || '#3b82f6'
+        {visibleStations.map((station) => {
+          const routeColor =
+            routes.find((r) => r.id === station.route_id)?.color || '#3b82f6'
           const isSelected = selectedStationId === station.id
 
           return (
@@ -192,15 +228,23 @@ export default function StudentMap({
               icon={getStationIcon(station, isSelected, routeColor)}
               eventHandlers={{
                 click: (e) => {
+                  // Prevent the click from bubbling up to MapEventController
+                  // so it does not trigger the "deselect" onMapClick handler.
                   L.DomEvent.stopPropagation(e)
+                  // Notify the parent so it can update selectedStationId and
+                  // any sidebar panel. Leaflet will also auto-open the <Popup>.
                   onSelectStation(station)
-                }
+                },
               }}
             >
               <Popup className="custom-leaflet-popup">
-                <div className={`${colors.bgCard} ${colors.text} p-2 rounded-xl border ${colors.borderAccent} font-sans min-w-[140px] text-xs shadow-md`}>
+                <div
+                  className={`${colors.bgCard} ${colors.text} p-2 rounded-xl border ${colors.borderAccent} font-sans min-w-[140px] text-xs shadow-md`}
+                >
                   <div className="font-bold text-sm mb-1">{station.name}</div>
-                  <div className={`flex justify-between items-center ${colors.textSecondary} text-[10px]`}>
+                  <div
+                    className={`flex justify-between items-center ${colors.textSecondary} text-[10px]`}
+                  >
                     <span>Stop {station.stop_order}</span>
                     <span className="bg-teal-500/20 text-teal-600 dark:text-teal-400 px-1.5 py-0.5 rounded font-bold">
                       {station.waiting_count} waiting
@@ -213,11 +257,14 @@ export default function StudentMap({
         })}
 
         {/* Caddy Markers */}
-        {activeCaddies.map(caddy => {
+        {activeCaddies.map((caddy) => {
           const lastPingTime = new Date(caddy.last_ping).getTime()
-          const staleMarkerThreshold = typeof STALE_MARKER_THRESHOLD_MS !== 'undefined' ? STALE_MARKER_THRESHOLD_MS : 45000
-          const isStale = (Date.now() - lastPingTime) > staleMarkerThreshold
-          const assignedRoute = routes.find(r => r.id === caddy.route_id)
+          const staleMarkerThreshold =
+            typeof STALE_MARKER_THRESHOLD_MS !== 'undefined'
+              ? STALE_MARKER_THRESHOLD_MS
+              : 45000
+          const isStale = Date.now() - lastPingTime > staleMarkerThreshold
+          const assignedRoute = routes.find((r) => r.id === caddy.route_id)
 
           return (
             <Marker
@@ -226,26 +273,40 @@ export default function StudentMap({
               icon={getCaddyIcon(caddy, isStale)}
             >
               <Popup className="custom-leaflet-popup">
-                <div className={`${colors.bgCard} ${colors.text} p-3 rounded-xl border ${colors.borderAccent} space-y-2 font-sans min-w-[170px] text-xs shadow-lg`}>
-                  <div className={`flex justify-between items-center border-b ${colors.border} pb-1.5`}>
+                <div
+                  className={`${colors.bgCard} ${colors.text} p-3 rounded-xl border ${colors.borderAccent} space-y-2 font-sans min-w-[170px] text-xs shadow-lg`}
+                >
+                  <div
+                    className={`flex justify-between items-center border-b ${colors.border} pb-1.5`}
+                  >
                     <span className="font-bold text-sm">{caddy.name}</span>
-                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${
-                      isStale ? 'bg-rose-500/10 text-rose-500 dark:text-rose-400' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                    }`}>
+                    <span
+                      className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${
+                        isStale
+                          ? 'bg-rose-500/10 text-rose-500 dark:text-rose-400'
+                          : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                      }`}
+                    >
                       {isStale ? 'Signal Lost' : 'Live'}
                     </span>
                   </div>
-                  <div className={`space-y-1 text-[11px] ${colors.textSecondary}`}>
+                  <div
+                    className={`space-y-1 text-[11px] ${colors.textSecondary}`}
+                  >
                     <div className="flex justify-between">
                       <span>Route:</span>
-                      <span className={`font-medium ${colors.text} truncate max-w-[100px]`}>
+                      <span
+                        className={`font-medium ${colors.text} truncate max-w-[100px]`}
+                      >
                         {assignedRoute ? assignedRoute.name : 'Unassigned'}
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span>Speed:</span>
                       <span className={`font-medium ${colors.text}`}>
-                        {caddy.speed ? `${Math.round(caddy.speed)} km/h` : '0 km/h'}
+                        {caddy.speed
+                          ? `${Math.round(caddy.speed)} km/h`
+                          : '0 km/h'}
                       </span>
                     </div>
                   </div>
