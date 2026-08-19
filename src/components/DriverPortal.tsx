@@ -327,6 +327,12 @@ export default function DriverPortal() {
         .update({ status: 'OFF_DUTY', speed: 0, heading: 0, current_lat: null, current_lng: null })
         .eq('id', assignedCaddy.id)
     }
+    // This is one of the two explicit ways to end the durable duty session
+    // (the other is the End Duty control in DriverShift). No poll, reconnect,
+    // or realtime event is allowed to clear this cache.
+    if (driverProfile && typeof window !== 'undefined') {
+      sessionStorage.removeItem(`caddy-duty:${driverProfile.id}`)
+    }
     setDriverProfile(null)
     setAssignedCaddy(null)
     setPhoneNumber('')

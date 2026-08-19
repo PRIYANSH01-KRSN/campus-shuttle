@@ -6,6 +6,7 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { MapTheme, MAP_TILES, getShuttleMarkerHTML, getStationMarkerHTML, getThemeColors, SNU_CAMPUS } from '@/utils/mapConfig'
 import { CAMPUS_CENTER, CAMPUS_BOUNDS, CAMPUS_ZOOM, STALE_MARKER_THRESHOLD_MS, STALE_THRESHOLD_MS } from '@/utils/campusData'
+import { useInterpolatedCaddyPositions } from '@/hooks/useInterpolatedCaddyPositions'
 
 interface Station {
   id: string
@@ -146,6 +147,7 @@ export default function StudentMap({
     if (timeSincePing >= threshold) return false
     return true
   })
+  const animatedCaddies = useInterpolatedCaddyPositions(activeCaddies)
 
   // ── Station icon builder ────────────────────────────────────────────────
   const getStationIcon = useCallback((
@@ -226,7 +228,7 @@ export default function StudentMap({
 
         {/* Caddy Markers */}
         <MemoizedCaddyMarkers 
-          activeCaddies={activeCaddies} 
+          activeCaddies={animatedCaddies}
           routes={routes} 
           getCaddyIcon={getCaddyIcon}
           colors={colors}

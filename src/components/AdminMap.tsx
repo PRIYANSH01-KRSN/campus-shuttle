@@ -27,6 +27,7 @@ import {
   STALE_MARKER_THRESHOLD_MS,
 } from '@/utils/campusData'
 import { WifiOff, Move } from 'lucide-react'
+import { useInterpolatedCaddyPositions } from '@/hooks/useInterpolatedCaddyPositions'
 
 export interface Station {
   id: string
@@ -173,6 +174,7 @@ export default function AdminMap({
   const visibleStations = selectedRouteId
     ? stations.filter((s) => s.route_id === selectedRouteId)
     : stations
+  const animatedCaddies = useInterpolatedCaddyPositions(caddies)
 
 
 
@@ -240,7 +242,7 @@ export default function AdminMap({
 
         {/* Caddy Fleet Markers */}
         <MemoizedCaddyMarkers 
-          caddies={caddies} 
+          caddies={animatedCaddies}
           routes={routes} 
           getCaddyIcon={getCaddyIcon}
           colors={colors}

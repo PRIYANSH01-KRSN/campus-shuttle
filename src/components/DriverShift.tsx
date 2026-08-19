@@ -7,11 +7,13 @@ import {
   Wifi, WifiOff, Users, BatteryCharging, Radio, Volume2, ShieldAlert
 } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
+import { Geolocation, type CallbackID, type Position } from '@capacitor/geolocation'
 import { BackgroundGeolocation } from '@capgo/background-geolocation'
 import dynamic from 'next/dynamic'
 import { ROUTES, ROUTE_PATHS } from '@/utils/campusData'
 
 const DriverMap = dynamic(() => import('./AdminMap'), { ssr: false })
+const OFF_DUTY_GRACE_WINDOW_MS = 45_000
 
 interface Profile {
   id: string
@@ -82,6 +84,20 @@ export default function DriverShift({
   const telemetryIntervalRef = useRef<any>(null)
   const heartbeatIntervalRef = useRef<any>(null)
   const lastGpsTimeRef = useRef<number>(Date.now())
+  const activeCaddyRef = useRef<Caddy | null>(caddy)
+  const dutyIntentRef = useRef(false)
+  const streamingRef = useRef(false)
+
+  const dutySessionKey = `caddy-duty:${profile.id}`
+  const saveDutyIntent = (active: boolean, caddyId?: string) => {
+    dutyIntentRef.current = active
+    if (typeof window === 'undefined') return
+    if (active && caddyId) {
+      sessionStorage.setItem(dutySessionKey, caddyId)
+    } else {
+      sessionStorage.removeItem(dutySessionKey)
+    }
+  }
   
   // Track latest coordinates — initialised to 0,0 so we can detect "no GPS fix yet"
   const lastLocationRef = useRef<{ lat: number, lng: number, heading: number, speed: number }>({
@@ -130,15 +146,25 @@ export default function DriverShift({
 
   // Synchronize internal caddy state
   useEffect(() => {
-    setCaddyState(caddy)
+    if (caddy && typeof window !== 'undefined' && sessionStorage.getItem(dutySessionKey) === caddy.id) {
+      dutyIntentRef.current = true
+    }
+    activeCaddyRef.current = caddy
+    // A delayed realtime/poll response must never undo the driver's active
+    // screen toggle. OFF_DUTY is only persisted by End Duty or logout.
+    setCaddyState(previous => {
+      if (dutyIntentRef.current && previous?.id === caddy?.id && caddy?.status === 'OFF_DUTY') {
+        return { ...caddy, status: 'ON_DUTY' }
+      }
+      return caddy
+    })
   }, [caddy])
 
   // Aggressive background resume: Restart streaming if user tabs back into the app
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && caddyState?.status === 'ON_DUTY') {
-        console.warn("App resumed via visibilitychange, forcefully restarting GPS stream...")
-        stopStreaming().then(() => startStreaming())
+      if (document.visibilityState === 'visible' && dutyIntentRef.current && !streamingRef.current) {
+        startStreaming()
       }
     }
     document.addEventListener("visibilitychange", handleVisibilityChange)
@@ -163,7 +189,7 @@ export default function DriverShift({
   }
 
   // Handle geolocation updates
-  const handleGpsUpdate = (position: GeolocationPosition) => {
+  const handleGpsUpdate = (position: GeolocationPosition | Position) => {
     const lat = position.coords.latitude
     const lng = position.coords.longitude
     
@@ -201,14 +227,57 @@ export default function DriverShift({
 
   // Streaming Engine loop
   const startStreaming = async () => {
-    if (!caddyState) return
-    
-    // 1. Activate Wake Lock
+    const activeCaddy = activeCaddyRef.current
+    if (!activeCaddy || streamingRef.current) return
+    streamingRef.current = true
+    saveDutyIntent(true, activeCaddy.id)
+
+    // Persist the toggle immediately. This comes before any permission or GPS
+    // async work, so the first Start Duty tap always starts a live session.
+    const now = new Date().toISOString()
+    const { data: updatedCaddy, error } = await supabase
+      .from('caddies')
+      .update({ status: 'ON_DUTY', speed: 0, heading: 0, last_ping: now })
+      .eq('id', activeCaddy.id)
+      .select()
+      .single()
+
+    if (error) {
+      streamingRef.current = false
+      saveDutyIntent(false)
+      console.error('Failed to start duty:', error)
+      return
+    }
+    if (updatedCaddy) {
+      activeCaddyRef.current = updatedCaddy
+      setCaddyState(updatedCaddy)
+      onCaddyStatusChange(updatedCaddy)
+    }
+
+    // 1. Activate Wake Lock after the durable state transition.
     await requestWakeLock()
 
     // 2. Register native background geolocation or fallback to browser watchPosition
     if (Capacitor.isNativePlatform()) {
       try {
+        const permission = await Geolocation.checkPermissions()
+        if (permission.location !== 'granted') await Geolocation.requestPermissions({ permissions: ['location'] })
+        const nativeWatchId: CallbackID = await Geolocation.watchPosition(
+          { enableHighAccuracy: true, timeout: 5000, maximumAge: 0, interval: 2500, minimumUpdateInterval: 1000 },
+          (position, nativeError) => {
+            if (nativeError || !position) {
+              console.error('Native GPS tracking error:', nativeError)
+              setGpsQuality('SEARCHING')
+              return
+            }
+            lastGpsTimeRef.current = Date.now()
+            handleGpsUpdate(position)
+          },
+        )
+        watchIdRef.current = nativeWatchId
+
+        // The Capgo service owns the Android foreground/background service;
+        // the Capacitor watch above is the primary high-accuracy foreground feed.
         await BackgroundGeolocation.start({
           backgroundMessage: "SNU Caddy Tracker is running in background",
           backgroundTitle: "SNU Caddy Tracker",
@@ -228,8 +297,6 @@ export default function DriverShift({
             const accuracy = loc.accuracy ?? 10
             acceptLocation(lat, lng, heading, loc.speed ?? null, accuracy, loc.time ? new Date(loc.time).getTime() : Date.now())
           }
-        }).then((id: any) => {
-          if (id) watchIdRef.current = id
         })
       } catch (err) {
         console.error('Failed to start Capacitor background geolocation:', err)
@@ -249,51 +316,19 @@ export default function DriverShift({
 
         watchIdRef.current = startWatch()
 
-        // 10-second GPS Heartbeat Watcher
+        // Network/GPS jitter only changes the local quality indicator. The
+        // active duty session remains ON_DUTY through a full 45-second grace
+        // window (and is never auto-written as OFF_DUTY).
         heartbeatIntervalRef.current = setInterval(() => {
           const timeSinceLastGps = Date.now() - lastGpsTimeRef.current
-          if (timeSinceLastGps > 10000) {
-            console.warn("GPS Heartbeat stalled for > 10s. Forcing fresh watchPosition subscription...")
-            if (watchIdRef.current !== null) {
-              navigator.geolocation.clearWatch(watchIdRef.current as number)
-            }
-            watchIdRef.current = startWatch()
-            lastGpsTimeRef.current = Date.now() // Reset to give it another 10s to acquire
+          if (timeSinceLastGps > OFF_DUTY_GRACE_WINDOW_MS) {
+            setGpsQuality('SEARCHING')
           }
-        }, 5000) // check every 5 seconds
+        }, 5000)
       }
     }
 
-    // 3. Set status to ON_DUTY — do NOT push coordinates yet (they may be 0,0
-    //    if the GPS fix hasn't arrived). The telemetry interval below will push
-    //    real coordinates once acceptLocation sets them.
-    const initialUpdate: Record<string, any> = {
-      status: 'ON_DUTY',
-      speed: 0,
-      heading: 0,
-      last_ping: new Date().toISOString()
-    }
-    // Only include lat/lng if we already have a real GPS fix
-    if (lastLocationRef.current.lat !== 0 || lastLocationRef.current.lng !== 0) {
-      initialUpdate.current_lat = lastLocationRef.current.lat
-      initialUpdate.current_lng = lastLocationRef.current.lng
-      initialUpdate.speed = lastLocationRef.current.speed
-      initialUpdate.heading = lastLocationRef.current.heading
-    }
-
-    const { data: updatedCaddy, error } = await supabase
-      .from('caddies')
-      .update(initialUpdate)
-      .eq('id', caddyState.id)
-      .select()
-      .single()
-
-    if (!error && updatedCaddy) {
-      setCaddyState(updatedCaddy)
-      onCaddyStatusChange(updatedCaddy)
-    }
-
-    // 4. Start 2.5-second push interval (geofence validation already handles filtering coordinates)
+    // 3. Start 2.5-second push interval (geofence validation already handles filtering coordinates)
     telemetryIntervalRef.current = setInterval(async () => {
       // Skip push if no real GPS fix has been acquired yet
       if (lastLocationRef.current.lat === 0 && lastLocationRef.current.lng === 0) return
@@ -319,7 +354,7 @@ export default function DriverShift({
             status: 'ON_DUTY',
             last_ping: ping.last_ping
           })
-          .eq('id', caddyState.id)
+          .eq('id', activeCaddy.id)
 
         if (pushError) {
           // Push failed: log to IndexedDB buffer
@@ -333,6 +368,7 @@ export default function DriverShift({
   }
 
   const stopStreaming = async () => {
+    streamingRef.current = false
     // 1. Clear intervals & watchers
     if (telemetryIntervalRef.current) {
       clearInterval(telemetryIntervalRef.current)
@@ -352,10 +388,10 @@ export default function DriverShift({
     }
 
     if (watchIdRef.current !== null) {
-      if (typeof watchIdRef.current === 'number') {
+      if (Capacitor.isNativePlatform() && typeof watchIdRef.current === 'string') {
+        await Geolocation.clearWatch({ id: watchIdRef.current })
+      } else if (typeof watchIdRef.current === 'number') {
         navigator.geolocation.clearWatch(watchIdRef.current)
-      } else if (Capacitor.isNativePlatform()) {
-        BackgroundGeolocation.stop()
       }
       watchIdRef.current = null
     }
@@ -376,6 +412,7 @@ export default function DriverShift({
   const handleTakeBreak = async () => {
     if (!caddyState) return
     await stopStreaming()
+    saveDutyIntent(false)
 
     // Update status to ON_BREAK
     const { data: updatedCaddy, error } = await supabase
@@ -399,6 +436,7 @@ export default function DriverShift({
   const handleEndDuty = async () => {
     if (!caddyState) return
     await stopStreaming()
+    saveDutyIntent(false)
 
     // End the shift but retain the admin-managed driver and route assignment.
     const { data: updatedCaddy, error } = await supabase
