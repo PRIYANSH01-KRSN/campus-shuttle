@@ -52,7 +52,7 @@ export const STATIONS: Record<string, StationPreset[]> = {
     { name: 'Cluster 5',         lat: 28.5225, lng: 77.5703, stop_order: 2 },
     { name: 'Cluster 4',         lat: 28.5235, lng: 77.5706, stop_order: 3 },
     { name: 'inner gate',            lat: 28.525575, lng: 77.571672, stop_order: 4 },
-    { name: 'chilika 1b(cluster 1)', lat: 28.52558333333333, lng: 77.57166666666667, stop_order: 5 },
+    { name: 'chilika 1b(cluster 1)', lat: 28.5242, lng: 77.5731, stop_order: 5 },
     { name: 'G Block',           lat: 28.528177747494905, lng: 77.57449105362907, stop_order: 6 },
   ],
 
@@ -63,7 +63,7 @@ export const STATIONS: Record<string, StationPreset[]> = {
     { name: 'Cluster 5',         lat: 28.5225, lng: 77.5703, stop_order: 2 },
     { name: 'Cluster 4',         lat: 28.5235, lng: 77.5706, stop_order: 3 },
     { name: 'inner gate',            lat: 28.525575, lng: 77.571672, stop_order: 4 },
-    { name: 'chilika 1b(cluster 1)', lat: 28.52558333333333, lng: 77.57166666666667, stop_order: 5 },
+    { name: 'chilika 1b(cluster 1)', lat: 28.5242, lng: 77.5731, stop_order: 5 },
     { name: 'D Block',           lat: 28.5254, lng: 77.5753, stop_order: 6 },
     { name: 'C Block',           lat: 28.5261, lng: 77.5757, stop_order: 7 },
     { name: 'B Block',           lat: 28.5266, lng: 77.5763, stop_order: 8 },
@@ -82,7 +82,7 @@ export const ROUTE_PATHS: Record<string, [number, number][]> = {
     [28.5225, 77.5703], // Cluster 5
     [28.5235, 77.5706], // Cluster 4
     [28.525575, 77.571672], // Inner Gate
-    [28.52558333333333, 77.57166666666667], // Chilika 1B
+    [28.5242, 77.5731], // Chilika 1B
     [28.528177747494905, 77.57449105362907], // G Block
     [28.533180530044106, 77.57664699610052]  // Gate 1 (close loop)
   ],
@@ -92,7 +92,7 @@ export const ROUTE_PATHS: Record<string, [number, number][]> = {
     [28.5225, 77.5703], // Cluster 5
     [28.5235, 77.5706], // Cluster 4
     [28.525575, 77.571672], // Inner Gate
-    [28.52558333333333, 77.57166666666667], // Chilika 1B
+    [28.5242, 77.5731], // Chilika 1B
     [28.5254, 77.5753], // D Block
     [28.5261, 77.5757], // C Block
     [28.5266, 77.5763], // B Block
