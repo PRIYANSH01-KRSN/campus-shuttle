@@ -497,7 +497,7 @@ export default function StudentPortal() {
       </div>
 
       {/* 3. Fullscreen Map */}
-      <div className="flex-1 w-full h-full z-10">
+      <div className="flex-1 w-full min-h-0 relative z-10">
         <StudentMap
           mapTheme={mapTheme}
           stations={stations}
@@ -531,6 +531,30 @@ export default function StudentPortal() {
             </div>
           </div>
         )}
+
+        {/* Floating Route Pills Capsule */}
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[400] bg-white/90 dark:bg-slate-900/90 backdrop-blur-md shadow-lg border border-slate-200/50 dark:border-slate-700/50 rounded-full px-2 py-1.5 flex items-center gap-1.5 w-max max-w-[90vw] overflow-x-auto no-scrollbar">
+          <button
+            onClick={() => setSelectedRouteId(null)}
+            className={`shrink-0 px-4 py-1.5 rounded-full text-xs font-bold tracking-wide transition-all shadow-sm ${
+              selectedRouteId === null ? 'bg-teal-500 text-white' : 'bg-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            All
+          </button>
+          {routes.map(route => (
+            <button
+              key={route.id}
+              onClick={() => setSelectedRouteId(route.id)}
+              className={`shrink-0 px-4 py-1.5 rounded-full text-xs font-bold tracking-wide transition-all shadow-sm flex items-center gap-2 ${
+                selectedRouteId === route.id ? 'bg-teal-500 text-white' : 'bg-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              <span className="w-2.5 h-2.5 rounded-full shadow-sm" style={{ backgroundColor: route.color }}></span>
+              {route.name}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* 4. Right FABs */}
@@ -550,34 +574,10 @@ export default function StudentPortal() {
       </div>
 
       {/* 5. Bottom UI Area */}
-      <div className="absolute bottom-0 left-0 right-0 z-[1000] flex flex-col items-center">
+      <div className="absolute bottom-0 left-0 right-0 z-[1000] flex flex-col items-center pointer-events-none">
         
-        {/* Route Pills */}
-        <div className="w-full px-4 mb-4 overflow-x-auto no-scrollbar flex items-center gap-2">
-          <button
-            onClick={() => setSelectedRouteId(null)}
-            className={`shrink-0 px-4 py-2 rounded-full text-xs font-bold tracking-wide transition-all shadow-md ${
-              selectedRouteId === null ? colors.pillActive : `${colors.bgCard} ${colors.text} ${colors.border} border`
-            }`}
-          >
-            All
-          </button>
-          {routes.map(route => (
-            <button
-              key={route.id}
-              onClick={() => setSelectedRouteId(route.id)}
-              className={`shrink-0 px-4 py-2 rounded-full text-xs font-bold tracking-wide transition-all shadow-md flex items-center gap-2 ${
-                selectedRouteId === route.id ? colors.pillActive : `${colors.bgCard} ${colors.text} ${colors.border} border`
-              }`}
-            >
-              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: route.color }}></span>
-              {route.name}
-            </button>
-          ))}
-        </div>
-
         {/* Bottom Sheet */}
-        <div className={`w-full ${colors.bgSheet} border-t ${colors.borderAccent} shadow-[0_-10px_40px_rgba(0,0,0,0.2)] rounded-t-3xl bottom-sheet flex flex-col ${
+        <div className={`w-full ${colors.bgSheet} border-t ${colors.borderAccent} shadow-[0_-10px_40px_rgba(0,0,0,0.2)] rounded-t-3xl bottom-sheet flex flex-col pointer-events-auto ${
           drawerOpen ? 'translate-y-0' : 'translate-y-[calc(100%-72px)]'
         }`}>
           
@@ -665,7 +665,7 @@ export default function StudentPortal() {
                     </div>
                   ) : (
                     <div className={`p-4 rounded-xl border border-dashed ${colors.borderAccent} ${colors.textSecondary} text-sm text-center font-medium`}>
-                      No incoming caddies on this route.
+                      {activeCaddiesList.length > 0 ? "🚌 Shuttles active. Live ETA will show once a driver departs your previous station." : "No incoming caddies on this route."}
                     </div>
                   )}
                 </div>

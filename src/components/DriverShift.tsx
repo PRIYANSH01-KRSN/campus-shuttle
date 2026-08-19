@@ -133,6 +133,18 @@ export default function DriverShift({
     setCaddyState(caddy)
   }, [caddy])
 
+  // Aggressive background resume: Restart streaming if user tabs back into the app
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && caddyState?.status === 'ON_DUTY') {
+        console.warn("App resumed via visibilitychange, forcefully restarting GPS stream...")
+        stopStreaming().then(() => startStreaming())
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
+  }, [caddyState?.status])
+
   // Clean up watchers on unmount
   useEffect(() => {
     return () => {
