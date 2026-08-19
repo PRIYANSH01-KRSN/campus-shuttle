@@ -3,107 +3,77 @@
 import React, { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import AdminPortal from '@/components/AdminPortal'
-import { ShieldAlert, Server, RefreshCw, Lock, Sparkles, UserCheck } from 'lucide-react'
+import { ShieldAlert, RefreshCw, Lock } from 'lucide-react'
 
 export default function AdminPage() {
+  const supabase = createClient()
   const [loading, setLoading] = useState(true)
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean | null>(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loginError, setLoginError] = useState<string | null>(null)
-  const [loginStatus, setLoginStatus] = useState<string | null>(null)
   const [loggingIn, setLoggingIn] = useState(false)
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && localStorage.getItem('snu-admin-auth') === 'true') {
-      setIsAdminAuthenticated(true)
-    }
-    setLoading(false)
-  }, [])
+    const verifyAdminSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.user) {
+        setIsAdminAuthenticated(false)
+        setLoading(false)
+        return
+      }
 
-  const grantAdminAccess = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('snu-admin-auth', 'true')
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .maybeSingle()
+      setIsAdminAuthenticated(profile?.role === 'admin')
+      setLoading(false)
     }
-    setIsAdminAuthenticated(true)
-    setLoggingIn(false)
-  }
+    void verifyAdminSession()
+  }, [])
 
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoggingIn(true)
     setLoginError(null)
-    setLoginStatus(null)
-
     const cleanInput = email.trim().toLowerCase()
     const cleanSecret = password.trim()
 
-    // 1. Master PIN & Key Passwords Override
-    const masterKeys = ['6565', '12345678', 'admin@12345', 'admin', '1234', 'priyansh', 'admin123']
-    if (masterKeys.includes(cleanSecret.toLowerCase()) || cleanInput.includes('admin')) {
-      grantAdminAccess()
-      return
-    }
-
-    // 2. Try Supabase Auth Sign In
-    const supabase = createClient()
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email: cleanInput,
         password: cleanSecret,
       })
 
-      if (!error && data?.user) {
-        // Ensure profile role is admin
-        await supabase
-          .from('profiles')
-          .update({ role: 'admin' })
-          .eq('id', data.user.id)
-        
-        grantAdminAccess()
+      if (error || !data.user) {
+        setLoginError('Invalid administrator email or password.')
         return
       }
 
-      // 3. If user does not exist in Supabase Auth, auto-register them as Admin
-      if (error && (error.message.includes('Invalid login credentials') || error.status === 400)) {
-        setLoginStatus('Creating new Admin account in Supabase...')
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-          email: cleanInput,
-          password: cleanSecret,
-          options: {
-            data: {
-              role: 'admin',
-              full_name: 'System Admin',
-            }
-          }
-        })
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', data.user.id)
+        .maybeSingle()
 
-        if (!signUpError && signUpData?.user) {
-          await supabase
-            .from('profiles')
-            .upsert({
-              id: signUpData.user.id,
-              role: 'admin',
-              full_name: 'System Admin',
-              phone: '9876543210'
-            })
-          
-          grantAdminAccess()
-          return
-        }
+      if (profileError || profile?.role !== 'admin') {
+        await supabase.auth.signOut()
+        setLoginError('This account is not authorized to access the admin portal.')
+        return
       }
-    } catch (err) {
-      console.warn('Supabase Auth error fallback:', err)
-    }
 
-    // Fallback: If any input was submitted, allow access for seamless administrative control
-    grantAdminAccess()
+      setIsAdminAuthenticated(true)
+    } catch {
+      setLoginError('Unable to sign in. Check your connection and try again.')
+    } finally {
+      setLoggingIn(false)
+    }
   }
 
-  const handleLogout = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('snu-admin-auth')
-    }
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
     setIsAdminAuthenticated(false)
   }
 
@@ -138,42 +108,35 @@ export default function AdminPage() {
           </div>
           <div className="space-y-1">
             <h2 className="text-xl font-bold tracking-tight text-white">Admin Control Center</h2>
-            <p className="text-xs text-slate-400">Sign in with your email/password or use master PIN <code className="bg-slate-850 px-1.5 py-0.5 rounded text-teal-400 font-mono font-bold">6565</code></p>
+            <p className="text-xs text-slate-400">Use your authorized administrator credentials.</p>
           </div>
         </div>
 
         {/* Login Form */}
         <form onSubmit={handleAdminLogin} className="space-y-4 text-xs">
           <div className="space-y-1.5">
-            <label className="text-slate-400 font-medium">Admin Email or Username</label>
+            <label className="text-slate-400 font-medium">Administrator email</label>
             <input
               type="text"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="priyanshkhandeliya@gmail.com"
+              placeholder="name@university.edu"
               className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-teal-500 transition-colors"
             />
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-slate-400 font-medium">Password or PIN</label>
+            <label className="text-slate-400 font-medium">Password</label>
             <input
               type="password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter password or 6565"
+              placeholder="Enter your password"
               className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-teal-500 transition-colors font-mono"
             />
           </div>
-
-          {loginStatus && (
-            <div className="bg-teal-950/40 border border-teal-900/40 text-teal-400 p-3 rounded-xl text-xs font-medium text-center flex items-center justify-center gap-2">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              {loginStatus}
-            </div>
-          )}
 
           {loginError && (
             <div className="bg-rose-950/40 border border-rose-900/40 text-rose-400 p-3 rounded-xl text-xs font-medium text-center">
@@ -191,23 +154,6 @@ export default function AdminPage() {
           </button>
         </form>
 
-        {/* 1-Click Instant Quick Access Button */}
-        <div className="pt-2 border-t border-slate-800/80">
-          <button
-            type="button"
-            onClick={grantAdminAccess}
-            className="w-full py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700/60 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all hover:border-teal-500/40"
-          >
-            <Sparkles className="w-4 h-4 text-teal-400" />
-            Quick Access as Admin (Instant Login)
-          </button>
-        </div>
-
-        {/* Footer info */}
-        <div className="bg-slate-950 border border-slate-800/60 rounded-2xl p-3.5 text-xs text-slate-400 flex items-center gap-2.5">
-          <UserCheck className="w-4 h-4 text-teal-400 shrink-0" />
-          <span>Automatic account creation and master PIN override enabled for local & staging environments.</span>
-        </div>
       </div>
     </div>
   )

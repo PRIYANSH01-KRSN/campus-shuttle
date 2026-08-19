@@ -7,7 +7,7 @@ import * as turf from '@turf/turf'
 import {
   Navigation, CheckCircle2, AlertCircle, Clock,
   MapPin, Route, Sun, Moon, Wifi, WifiOff,
-  ChevronUp, Crosshair, Building2, ExternalLink, Bus
+  ChevronUp, Crosshair, Building2, ExternalLink, Bus, RefreshCw
 } from 'lucide-react'
 import { MapTheme, getMapTheme, setMapTheme as setMapThemeLS, getThemeColors } from '@/utils/mapConfig'
 import {
@@ -104,6 +104,7 @@ export default function StudentPortal() {
   const [gpsLoading, setGpsLoading] = useState(false)
   const [cooldownRemaining, setCooldownRemaining] = useState<number>(0)
   const [showStatusBanner, setShowStatusBanner] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   
   // Ad State
   const [currentAd, setCurrentAd] = useState<AdBanner | null>(null)
@@ -147,7 +148,7 @@ export default function StudentPortal() {
     try {
       const { data: routesData } = await supabase.from('routes').select('*')
       const { data: stationsData } = await supabase.from('campus_stations').select('*')
-      const { data: caddiesData } = await supabase.from('caddies').select('*')
+      const { data: caddiesData, error: caddiesError } = await supabase.from('caddies').select('*')
       const { data: pathsData } = await supabase.from('route_paths').select('*')
       const { data: adsData } = await supabase.from('ad_banners').select('*').eq('is_active', true)
 
@@ -170,9 +171,12 @@ export default function StudentPortal() {
         setStations(fallbackStations)
       }
 
-      if (caddiesData && caddiesData.length > 0) {
-        setCaddies(caddiesData)
-      } else {
+      const caddyRows = Array.isArray(caddiesData) ? caddiesData : []
+      if (!caddiesError && caddyRows.length > 0) {
+        // Keep every database row. Vehicle identity is always the caddy id,
+        // never an array position.
+        setCaddies(caddyRows)
+      } else if (!caddiesError && caddyRows.length === 0) {
         setCaddies([
           { id: 'caddy-1', name: 'Caddy 1', route_id: ROUTES.GATE_1.id, status: 'OFF_DUTY', current_driver_id: null, current_lat: null, current_lng: null, speed: 0, heading: 0, last_ping: new Date().toISOString() },
           { id: 'caddy-2', name: 'Caddy 2', route_id: ROUTES.GATE_2.id, status: 'OFF_DUTY', current_driver_id: null, current_lat: null, current_lng: null, speed: 0, heading: 0, last_ping: new Date().toISOString() }
@@ -202,7 +206,11 @@ export default function StudentPortal() {
 
   useEffect(() => {
     fetchBaseData()
-    const pollInterval = setInterval(fetchBaseData, POLLING_INTERVAL_MS)
+    // Realtime is primary; visible-page polling is a reliable fallback when a
+    // mobile browser reconnects its WebSocket in the background.
+    const pollInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchBaseData()
+    }, Math.min(POLLING_INTERVAL_MS, 2500))
 
     const savedCooldown = localStorage.getItem('wait_flag_cooldown')
     if (savedCooldown) {
@@ -213,6 +221,13 @@ export default function StudentPortal() {
 
     return () => clearInterval(pollInterval)
   }, [])
+
+  const handleRefreshLiveLocation = async () => {
+    if (isRefreshing) return
+    setIsRefreshing(true)
+    await fetchBaseData()
+    setIsRefreshing(false)
+  }
 
   useEffect(() => {
     if (cooldownRemaining <= 0) return
@@ -240,7 +255,14 @@ export default function StudentPortal() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'caddies' }, (payload) => {
         if (payload.eventType === 'UPDATE') {
           const updatedCaddy = payload.new as Caddy
-          setCaddies(prev => prev.map(c => c.id === updatedCaddy.id ? updatedCaddy : c))
+          if (!updatedCaddy?.id) return
+          // Upsert by caddy id: a delayed/previously unseen Caddy 2 update
+          // cannot overwrite or disappear behind Caddy 1's state slot.
+          setCaddies(prev => {
+            const existingIndex = prev.findIndex(caddy => caddy.id === updatedCaddy.id)
+            if (existingIndex === -1) return [...prev, updatedCaddy]
+            return prev.map(caddy => caddy.id === updatedCaddy.id ? updatedCaddy : caddy)
+          })
         } else {
           fetchBaseData()
         }
@@ -488,12 +510,23 @@ export default function StudentPortal() {
           <span className={`text-xs font-bold ${colors.text}`}>SNU Shuttle</span>
         </div>
 
-        <button 
-          onClick={handleThemeToggle}
-          className={`p-2.5 rounded-full ${colors.bgCard} shadow-lg border ${colors.borderAccent} ${colors.text} hover:scale-105 active:scale-95 transition-all`}
-        >
-          {mapTheme === 'light' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleRefreshLiveLocation}
+            disabled={isRefreshing}
+            aria-label="Refresh live shuttle locations"
+            className={`p-2.5 rounded-full ${colors.bgCard} shadow-lg border ${colors.borderAccent} ${colors.text} hover:scale-105 active:scale-95 transition-all disabled:opacity-60`}
+          >
+            <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </button>
+          <button
+            onClick={handleThemeToggle}
+            aria-label="Toggle map theme"
+            className={`p-2.5 rounded-full ${colors.bgCard} shadow-lg border ${colors.borderAccent} ${colors.text} hover:scale-105 active:scale-95 transition-all`}
+          >
+            {mapTheme === 'light' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          </button>
+        </div>
       </div>
 
       {/* 3. Fullscreen Map */}

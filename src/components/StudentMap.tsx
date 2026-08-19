@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef, useCallback } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { MapTheme, MAP_TILES, getShuttleMarkerHTML, getStationMarkerHTML, getThemeColors, SNU_CAMPUS } from '@/utils/mapConfig'
@@ -104,6 +104,14 @@ function MapEventController({
   return null
 }
 
+function RouteViewport({ path }: { path: [number, number][] }) {
+  const map = useMap()
+  useEffect(() => {
+    if (path.length > 1) map.fitBounds(L.latLngBounds(path), { padding: [36, 72], maxZoom: 17 })
+  }, [map, path])
+  return null
+}
+
 export default function StudentMap({
   mapTheme,
   caddies,
@@ -198,6 +206,7 @@ export default function StudentMap({
         className="w-full h-full z-0"
       >
         <MapEventController onMapClick={onMapClick} mapRef={mapRef} />
+        {selectedRouteId && activeRoutePath.length > 1 && <RouteViewport path={activeRoutePath} />}
 
         <TileLayer
           key={mapTheme}
@@ -205,6 +214,10 @@ export default function StudentMap({
           attribution={tileConfig.attribution}
           maxZoom={19}
         />
+
+        {/* Student position is intentionally rendered in its own layer and is
+            never used as a shuttle coordinate. */}
+        {userLocation && <StudentLocationMarker position={userLocation} />}
 
         {/* Route Polyline */}
         {selectedRouteId && activeRoutePath && activeRoutePath.length > 0 && (
@@ -235,6 +248,18 @@ export default function StudentMap({
         />
       </MapContainer>
     </div>
+  )
+}
+
+function StudentLocationMarker({ position }: { position: [number, number] }) {
+  return (
+    <CircleMarker
+      center={position}
+      radius={8}
+      pathOptions={{ color: '#ffffff', weight: 3, fillColor: '#2563eb', fillOpacity: 1 }}
+    >
+      <Popup>You are here</Popup>
+    </CircleMarker>
   )
 }
 

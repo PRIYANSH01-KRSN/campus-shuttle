@@ -87,6 +87,7 @@ export default function DriverShift({
   const activeCaddyRef = useRef<Caddy | null>(caddy)
   const dutyIntentRef = useRef(false)
   const streamingRef = useRef(false)
+  const startStreamingRef = useRef<() => Promise<void>>(async () => undefined)
 
   const dutySessionKey = `caddy-duty:${profile.id}`
   const saveDutyIntent = (active: boolean, caddyId?: string) => {
@@ -160,15 +161,25 @@ export default function DriverShift({
     })
   }, [caddy])
 
-  // Aggressive background resume: Restart streaming if user tabs back into the app
+  // Resume through a ref so the window listener always invokes the latest
+  // tracker with the current caddy, not a stale render closure.
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && dutyIntentRef.current && !streamingRef.current) {
-        startStreaming()
+        void startStreamingRef.current()
       }
     }
     document.addEventListener("visibilitychange", handleVisibilityChange)
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
+  }, [])
+
+  // A duty-state transition is the source of truth for the tracker lifecycle.
+  // This recovers tracking immediately if a render lands between the durable
+  // ON_DUTY mutation and listener registration.
+  useEffect(() => {
+    if (caddyState?.status === 'ON_DUTY' && dutyIntentRef.current && !streamingRef.current) {
+      void startStreamingRef.current()
+    }
   }, [caddyState?.status])
 
   // Clean up watchers on unmount
@@ -262,6 +273,13 @@ export default function DriverShift({
       try {
         const permission = await Geolocation.checkPermissions()
         if (permission.location !== 'granted') await Geolocation.requestPermissions({ permissions: ['location'] })
+        // Android needs a foreground notification plus background authorization
+        // to continue GPS updates after the driver presses Home. The native
+        // plugin handles OS-specific settings prompts where required.
+        const backgroundPermission = await BackgroundGeolocation.checkPermissions()
+        if (backgroundPermission.backgroundLocation !== 'granted' || backgroundPermission.notification !== 'granted') {
+          await BackgroundGeolocation.requestPermissions({ permissions: ['backgroundLocation', 'notification'] })
+        }
         const nativeWatchId: CallbackID = await Geolocation.watchPosition(
           { enableHighAccuracy: true, timeout: 5000, maximumAge: 0, interval: 2500, minimumUpdateInterval: 1000 },
           (position, nativeError) => {
@@ -366,6 +384,8 @@ export default function DriverShift({
       }
     }, 2500)
   }
+
+  startStreamingRef.current = startStreaming
 
   const stopStreaming = async () => {
     streamingRef.current = false
