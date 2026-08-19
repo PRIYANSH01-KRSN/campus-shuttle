@@ -150,6 +150,9 @@ export default function AdminMap({
     })
   }, [])
 
+  // Keep this hook above the mounted guard. Calling it only after the first
+  // client render changes the hook order and crashes React's ErrorBoundary.
+  const animatedCaddies = useInterpolatedCaddyPositions(caddies)
 
   if (!mounted) {
     return (
@@ -174,7 +177,6 @@ export default function AdminMap({
   const visibleStations = selectedRouteId
     ? stations.filter((s) => s.route_id === selectedRouteId)
     : stations
-  const animatedCaddies = useInterpolatedCaddyPositions(caddies)
 
 
 

@@ -152,12 +152,13 @@ export default function DriverPortal() {
       .eq('route_id', routeId)
       .order('stop_order', { ascending: true })
 
-    if (!error && data) {
-      setStations(data)
+    const safeStations = Array.isArray(data) ? data : []
+    if (!error) {
+      setStations(safeStations)
       
       // Check if waiting counts increased on any station
       let playSound = false
-      data.forEach((station: Station) => {
+      safeStations.forEach((station: Station) => {
         const prevCount = prevWaitingCounts.current[station.id] ?? 0
         if (station.waiting_count > prevCount) {
           playSound = true
@@ -201,13 +202,14 @@ export default function DriverPortal() {
       
       const getAllReq = store.getAll()
       getAllReq.onsuccess = async () => {
-        const bufferedPings = getAllReq.result
+        const bufferedPings = Array.isArray(getAllReq.result) ? getAllReq.result : []
         if (bufferedPings.length === 0) return
 
         console.log(`Syncing ${bufferedPings.length} offline telemetry updates...`)
         
         // Push the latest ping from the buffer to update current caddy tracking state
         const latestPing = bufferedPings[bufferedPings.length - 1]
+        if (!latestPing || !assignedCaddy) return
         
         const { error } = await supabase
           .from('caddies')
@@ -219,7 +221,7 @@ export default function DriverPortal() {
             status: latestPing.status,
             last_ping: latestPing.last_ping
           })
-          .eq('id', assignedCaddy!.id)
+          .eq('id', assignedCaddy.id)
 
         if (!error) {
           // Clear IndexedDB buffer on successful sync
@@ -295,11 +297,17 @@ export default function DriverPortal() {
       }
 
       // 2. A driver may only operate caddies assigned by an administrator.
-      const { data: caddiesData } = await supabase
+      const { data: caddiesData, error: caddiesError } = await supabase
         .from('caddies')
         .select('*')
 
-      const assignedList = caddiesData ? caddiesData.filter((c: any) => c.current_driver_id === profile.id) : []
+      if (caddiesError) {
+        setAuthError(`Could not load vehicle assignment: ${caddiesError.message}`)
+        return
+      }
+
+      const caddyRows = Array.isArray(caddiesData) ? caddiesData : []
+      const assignedList = caddyRows.filter((c: Caddy) => c.current_driver_id === profile.id)
       if (assignedList.length === 0) {
         setAuthError('Your account has no caddy assignment. Please contact the transport administrator.')
         return

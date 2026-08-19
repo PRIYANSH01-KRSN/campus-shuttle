@@ -485,7 +485,7 @@ export default function DriverShift({
   }
 
   if (!caddyState || showVehiclePicker) {
-    const listToDisplay = availableCaddies
+    const listToDisplay = Array.isArray(availableCaddies) ? availableCaddies : []
 
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center p-6 text-center space-y-6 font-sans">
