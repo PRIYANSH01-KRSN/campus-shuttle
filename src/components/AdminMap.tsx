@@ -122,31 +122,6 @@ export default function AdminMap({
   useEffect(() => {
     setMounted(true)
   }, [])
-
-  if (!mounted) {
-    return (
-      <div className="w-full h-full min-h-[400px] flex items-center justify-center bg-slate-100 dark:bg-slate-900 rounded-2xl">
-        <span className="text-sm font-medium text-slate-500">Loading Campus Map...</span>
-      </div>
-    )
-  }
-
-  const tileConfig = MAP_TILES[mapTheme] || MAP_TILES.light
-  const colors = getThemeColors(mapTheme)
-
-  const centerPos: [number, number] = CAMPUS_CENTER || SNU_CAMPUS?.center || [28.5245, 77.5750]
-  const bounds: [[number, number], [number, number]] = CAMPUS_BOUNDS || SNU_CAMPUS?.bounds || [
-    [28.5150, 77.5650],
-    [28.5350, 77.5850],
-  ]
-  const defaultZoom = CAMPUS_ZOOM?.initial || SNU_CAMPUS?.defaultZoom || 16.5
-  const minZoom = CAMPUS_ZOOM?.min || SNU_CAMPUS?.minZoom || 15
-  const maxZoom = CAMPUS_ZOOM?.max || SNU_CAMPUS?.maxZoom || 19
-
-  const visibleStations = selectedRouteId
-    ? stations.filter((s) => s.route_id === selectedRouteId)
-    : stations
-
   const getStationIcon = useCallback((
     station: Station,
     isSelected: boolean,
@@ -173,6 +148,33 @@ export default function AdminMap({
       iconAnchor: [24, 24],
     })
   }, [])
+
+
+  if (!mounted) {
+    return (
+      <div className="w-full h-full min-h-[400px] flex items-center justify-center bg-slate-100 dark:bg-slate-900 rounded-2xl">
+        <span className="text-sm font-medium text-slate-500">Loading Campus Map...</span>
+      </div>
+    )
+  }
+
+  const tileConfig = MAP_TILES[mapTheme] || MAP_TILES.light
+  const colors = getThemeColors(mapTheme)
+
+  const centerPos: [number, number] = CAMPUS_CENTER || SNU_CAMPUS?.center || [28.5245, 77.5750]
+  const bounds: [[number, number], [number, number]] = CAMPUS_BOUNDS || SNU_CAMPUS?.bounds || [
+    [28.5150, 77.5650],
+    [28.5350, 77.5850],
+  ]
+  const defaultZoom = CAMPUS_ZOOM?.initial || SNU_CAMPUS?.defaultZoom || 16.5
+  const minZoom = CAMPUS_ZOOM?.min || SNU_CAMPUS?.minZoom || 15
+  const maxZoom = CAMPUS_ZOOM?.max || SNU_CAMPUS?.maxZoom || 19
+
+  const visibleStations = selectedRouteId
+    ? stations.filter((s) => s.route_id === selectedRouteId)
+    : stations
+
+
 
   const validRoutePath = Array.isArray(activeRoutePath) ? activeRoutePath : []
 
