@@ -15,7 +15,7 @@ import { MapTheme, getMapTheme, setMapTheme as setMapThemeLS } from '@/utils/map
 const AdminMap = dynamic(() => import('./AdminMap'), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-full min-h-[480px] bg-slate-900 animate-pulse rounded-2xl flex flex-col items-center justify-center text-slate-500 text-sm border border-slate-800 gap-3">
+    <div className="w-full h-full min-h-[300px] lg:min-h-[480px] bg-slate-900 animate-pulse rounded-2xl flex flex-col items-center justify-center text-slate-500 text-sm border border-slate-800 gap-3">
       <RefreshCw className="w-6 h-6 animate-spin text-teal-500" />
       <span>Initializing High-Clarity Campus Map...</span>
     </div>
@@ -785,7 +785,7 @@ export default function AdminPortal({ onLogout }: { onLogout?: () => void }) {
                   </div>
 
                   {/* Leaflet Map Area */}
-                  <div className="flex-1 min-h-[480px] rounded-2xl overflow-hidden border border-slate-850 shadow-2xl relative">
+                  <div className="flex-1 h-full min-h-[300px] lg:min-h-[480px] rounded-2xl overflow-hidden border border-slate-850 shadow-2xl relative">
                     <AdminMap
                       mapTheme={mapTheme}
                       caddies={caddies}
@@ -805,7 +805,7 @@ export default function AdminPortal({ onLogout }: { onLogout?: () => void }) {
 
               {activeTab === 'fleet' && (
                 <div className="space-y-6 flex flex-col h-full">
-                  <div className="h-[280px] rounded-2xl overflow-hidden border border-slate-850 shadow-xl relative">
+                  <div className="h-[250px] lg:h-[280px] rounded-2xl overflow-hidden border border-slate-850 shadow-xl relative">
                     <AdminMap
                       mapTheme={mapTheme}
                       caddies={caddies}
@@ -1043,7 +1043,7 @@ export default function AdminPortal({ onLogout }: { onLogout?: () => void }) {
                       </span>
                     </div>
 
-                    <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
+                    <div className="space-y-2.5 max-h-[250px] lg:max-h-[300px] overflow-y-auto pr-1">
                       {selectedRouteId ? (
                         stations
                           .filter(s => s.route_id === selectedRouteId)
@@ -1095,7 +1095,7 @@ export default function AdminPortal({ onLogout }: { onLogout?: () => void }) {
                       </button>
                     </div>
 
-                    <div className="space-y-2.5 max-h-[250px] overflow-y-auto pr-1">
+                    <div className="space-y-2.5 max-h-[200px] lg:max-h-[250px] overflow-y-auto pr-1">
                       {caddies.map((caddy) => (
                         <div key={caddy.id} className="bg-slate-950 border border-slate-850 rounded-xl p-3 flex justify-between items-center group text-xs gap-2">
                           <div>

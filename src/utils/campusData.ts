@@ -53,7 +53,7 @@ export const STATIONS: Record<string, StationPreset[]> = {
     { name: 'Cluster 4',         lat: 28.5235, lng: 77.5706, stop_order: 3 },
     { name: 'Gir Hostel',        lat: 28.5248, lng: 77.5709, stop_order: 4 },
     { name: 'Chilika Hostel 1B', lat: 28.5242, lng: 77.5731, stop_order: 5 },
-    { name: 'G Block',           lat: 28.520000, lng: 77.570000, stop_order: 6 },
+    { name: 'G Block',           lat: 28.528177747494905, lng: 77.57449105362907, stop_order: 6 },
   ],
 
   // Gate 2 Route — 10 stops
@@ -83,7 +83,7 @@ export const ROUTE_PATHS: Record<string, [number, number][]> = {
     [28.5235, 77.5706], // Cluster 4
     [28.5248, 77.5709], // Gir
     [28.5242, 77.5731], // Chilika
-    [28.520000, 77.570000], // G Block
+    [28.528177747494905, 77.57449105362907], // G Block
     [28.533180530044106, 77.57664699610052]  // Gate 1 (close loop)
   ],
 

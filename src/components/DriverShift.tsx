@@ -77,9 +77,11 @@ export default function DriverShift({
   const [gpsQuality, setGpsQuality] = useState<'EXCELLENT' | 'WEAK' | 'SEARCHING'>('SEARCHING')
 
   // Refs for tracking
-  const watchIdRef = useRef<number | null>(null)
+  const watchIdRef = useRef<string | number | null>(null)
   const wakeLockRef = useRef<any>(null)
   const telemetryIntervalRef = useRef<any>(null)
+  const heartbeatIntervalRef = useRef<any>(null)
+  const lastGpsTimeRef = useRef<number>(Date.now())
   
   // Track latest coordinates — initialised to 0,0 so we can detect "no GPS fix yet"
   const lastLocationRef = useRef<{ lat: number, lng: number, heading: number, speed: number }>({
@@ -214,17 +216,39 @@ export default function DriverShift({
             const accuracy = loc.accuracy ?? 10
             acceptLocation(lat, lng, heading, loc.speed ?? null, accuracy, loc.time ? new Date(loc.time).getTime() : Date.now())
           }
+        }).then((id: any) => {
+          if (id) watchIdRef.current = id
         })
       } catch (err) {
         console.error('Failed to start Capacitor background geolocation:', err)
       }
     } else {
       if (navigator.geolocation) {
-        watchIdRef.current = navigator.geolocation.watchPosition(
-          handleGpsUpdate,
-          handleGpsError,
-          { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
-        )
+        const startWatch = () => {
+          return navigator.geolocation.watchPosition(
+            (pos) => {
+              lastGpsTimeRef.current = Date.now()
+              handleGpsUpdate(pos)
+            },
+            handleGpsError,
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+          )
+        }
+
+        watchIdRef.current = startWatch()
+
+        // 10-second GPS Heartbeat Watcher
+        heartbeatIntervalRef.current = setInterval(() => {
+          const timeSinceLastGps = Date.now() - lastGpsTimeRef.current
+          if (timeSinceLastGps > 10000) {
+            console.warn("GPS Heartbeat stalled for > 10s. Forcing fresh watchPosition subscription...")
+            if (watchIdRef.current !== null) {
+              navigator.geolocation.clearWatch(watchIdRef.current as number)
+            }
+            watchIdRef.current = startWatch()
+            lastGpsTimeRef.current = Date.now() // Reset to give it another 10s to acquire
+          }
+        }, 5000) // check every 5 seconds
       }
     }
 
@@ -302,6 +326,10 @@ export default function DriverShift({
       clearInterval(telemetryIntervalRef.current)
       telemetryIntervalRef.current = null
     }
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current)
+      heartbeatIntervalRef.current = null
+    }
 
     if (Capacitor.isNativePlatform()) {
       try {
@@ -312,7 +340,11 @@ export default function DriverShift({
     }
 
     if (watchIdRef.current !== null) {
-      navigator.geolocation.clearWatch(watchIdRef.current)
+      if (typeof watchIdRef.current === 'number') {
+        navigator.geolocation.clearWatch(watchIdRef.current)
+      } else if (Capacitor.isNativePlatform()) {
+        BackgroundGeolocation.stop()
+      }
       watchIdRef.current = null
     }
 
@@ -528,7 +560,7 @@ export default function DriverShift({
           </div>
         </div>
 
-        <div className="h-[260px] rounded-3xl overflow-hidden border border-slate-850">
+        <div className="h-[200px] lg:h-[260px] rounded-3xl overflow-hidden border border-slate-850">
           <DriverMap
             mapTheme="dark"
             caddies={caddyState ? [caddyState] : []}
@@ -548,7 +580,7 @@ export default function DriverShift({
             <span className="text-[10px] text-slate-500 font-mono uppercase font-bold">Duty Stops</span>
           </div>
 
-          <div className="space-y-2 overflow-y-auto max-h-[220px] flex-1 pr-1">
+          <div className="space-y-2 overflow-y-auto max-h-[160px] lg:max-h-[220px] flex-1 pr-1">
             {stations.length > 0 ? (
               stations.map(station => (
                 <div key={station.id} className="bg-slate-950 border border-slate-850 rounded-2xl p-3.5 flex justify-between items-center text-xs">
