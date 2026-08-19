@@ -238,7 +238,7 @@ export default function StudentMap({
 
 // ── Memoized Sub-components ──────────────────────────────────────────────
 
-const MemoizedPolyline = React.memo(({ activeRoutePath, selectedRouteId, routes }: any) => {
+const MemoizedPolyline = React.memo(function MemoizedPolylineComponent({ activeRoutePath, selectedRouteId, routes }: any) {
   return (
     <Polyline
       positions={activeRoutePath}
@@ -255,7 +255,7 @@ const MemoizedPolyline = React.memo(({ activeRoutePath, selectedRouteId, routes 
   )
 })
 
-const MemoizedStationMarkers = React.memo(({ visibleStations, routes, selectedStationId, getStationIcon, onSelectStation, colors, markerRefsMap }: any) => {
+const MemoizedStationMarkers = React.memo(function MemoizedStationMarkersComponent({ visibleStations, routes, selectedStationId, getStationIcon, onSelectStation, colors, markerRefsMap }: any) {
   return (
     <>
       {visibleStations.map((station: any) => {
@@ -312,7 +312,7 @@ const MemoizedStationMarkers = React.memo(({ visibleStations, routes, selectedSt
   return true;
 })
 
-const MemoizedCaddyMarkers = React.memo(({ activeCaddies, routes, getCaddyIcon, colors }: any) => {
+const MemoizedCaddyMarkers = React.memo(function MemoizedCaddyMarkersComponent({ activeCaddies, routes, getCaddyIcon, colors }: any) {
   return (
     <>
       {activeCaddies.map((caddy: any) => {

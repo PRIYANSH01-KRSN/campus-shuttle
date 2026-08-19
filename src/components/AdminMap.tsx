@@ -250,7 +250,7 @@ export default function AdminMap({
 
 // ── Memoized Sub-components ──────────────────────────────────────────────
 
-const MemoizedPolyline = React.memo(({ validRoutePath, selectedRouteId, routes }: any) => {
+const MemoizedPolyline = React.memo(function MemoizedPolylineComponent({ validRoutePath, selectedRouteId, routes }: any) {
   return (
     <Polyline
       positions={validRoutePath}
@@ -266,7 +266,7 @@ const MemoizedPolyline = React.memo(({ validRoutePath, selectedRouteId, routes }
   )
 })
 
-const MemoizedStationMarkers = React.memo(({ visibleStations, routes, selectedStationId, isStudioMode, getStationIcon, onSelectStation, onStationDragEnd, colors }: any) => {
+const MemoizedStationMarkers = React.memo(function MemoizedStationMarkersComponent({ visibleStations, routes, selectedStationId, isStudioMode, getStationIcon, onSelectStation, onStationDragEnd, colors }: any) {
   return (
     <>
       {visibleStations.map((station: any) => {
@@ -326,7 +326,7 @@ const MemoizedStationMarkers = React.memo(({ visibleStations, routes, selectedSt
   return true;
 })
 
-const MemoizedCaddyMarkers = React.memo(({ caddies, routes, getCaddyIcon, colors }: any) => {
+const MemoizedCaddyMarkers = React.memo(function MemoizedCaddyMarkersComponent({ caddies, routes, getCaddyIcon, colors }: any) {
   return (
     <>
       {caddies.map((caddy: any) => {
