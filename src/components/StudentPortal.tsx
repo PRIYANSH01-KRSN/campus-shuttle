@@ -227,17 +227,10 @@ export default function StudentPortal() {
     return () => clearInterval(pollInterval)
   }, [])
 
-  const handleRefreshLiveLocation = async () => {
-    if (isRefreshing) return
-    setIsRefreshing(true)
-    const success = await fetchBaseData()
-    if (success) {
-      setShowStatusBanner({ type: 'success', text: 'Live location refreshed' })
-    } else {
-      setShowStatusBanner({ type: 'error', text: 'Failed to refresh location' })
+  const handleRefreshLiveLocation = () => {
+    if (typeof window !== 'undefined') {
+      window.location.reload()
     }
-    setTimeout(() => setShowStatusBanner(null), 3000)
-    setIsRefreshing(false)
   }
 
   useEffect(() => {
