@@ -20,6 +20,7 @@ interface Profile {
   full_name: string
   phone: string
   role: 'admin' | 'driver' | 'student'
+  pin?: string
 }
 
 interface Caddy {
@@ -108,6 +109,7 @@ export default function DriverShift({
   const dutyIntentRef = useRef(false)
   const streamingRef = useRef(false)
   const startStreamingRef = useRef<() => Promise<void>>(async () => undefined)
+  const telemetrySessionTokenRef = useRef<string | null>(null)
 
   const dutySessionKey = `caddy-duty:${profile.id}`
   const saveDutyIntent = (active: boolean, caddyId?: string) => {
@@ -252,32 +254,12 @@ export default function DriverShift({
       last_ping: new Date().toISOString()
     }
 
-    if (navigator.onLine) {
-      addLog(`[DB_UPDATE_START] Ping: ${ping.last_ping}`)
-      const reqStart = Date.now()
-      const { error: pushError } = await supabase
-        .from('caddies')
-        .update({
-          current_lat: ping.lat,
-          current_lng: ping.lng,
-          speed: ping.speed,
-          heading: ping.heading,
-          status: 'ON_DUTY',
-          last_ping: ping.last_ping
-        })
-        .eq('id', activeCaddyRef.current.id)
-
-      const duration = Date.now() - reqStart
-
-      if (pushError) {
-        addLog(`[DB_UPDATE_FAIL] ${duration}ms Err: ${pushError.code}`)
-        console.error('Supabase telemetry push error:', pushError)
-        onTelemetryLogged(ping)
-      } else {
-        addLog(`[DB_UPDATE_SUCCESS] ${duration}ms`)
-      }
-    } else {
-      addLog(`[DB_UPDATE_FAIL] Offline`)
+    // Push telemetry is now handled natively by Capgo HTTP webhooks in the background.
+    // This JS callback only updates local state and frontend diagnostic logs.
+    addLog(`[JS_TELEMETRY] Delegated to native HTTP layer (Token Active)`)
+    
+    // Optionally buffer offline logs if desired, but native HTTP doesn't use it.
+    if (!navigator.onLine) {
       onTelemetryLogged(ping)
     }
   }
@@ -316,6 +298,25 @@ export default function DriverShift({
     if (!activeCaddy || streamingRef.current) return
     streamingRef.current = true
     saveDutyIntent(true, activeCaddy.id)
+
+    // 1. Authenticate and create secure telemetry session token
+    let sessionToken = ''
+    try {
+      const { data: token, error: rpcError } = await supabase.rpc('create_telemetry_session', {
+        p_phone: profile.phone,
+        p_pin: profile.pin || '', // Fallback safely if pin missing
+        p_caddy_id: activeCaddy.id
+      })
+      if (rpcError) throw rpcError
+      if (!token) throw new Error('No token returned')
+      sessionToken = token
+      telemetrySessionTokenRef.current = sessionToken
+    } catch (err: any) {
+      streamingRef.current = false
+      saveDutyIntent(false)
+      console.error('Failed to create telemetry session:', err)
+      return
+    }
 
     // Persist the toggle immediately. This comes before any permission or GPS
     // async work, so the first Start Duty tap always starts a live session.
@@ -376,6 +377,12 @@ export default function DriverShift({
           requestPermissions: true,
           stale: false,
           distanceFilter: 10,
+          url: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/rpc/update_caddy_telemetry`,
+          headers: {
+            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${sessionToken}`
+          }
         }, (loc: any, error) => {
           if (error) {
             console.error('Background geolocation error:', error)
@@ -487,6 +494,17 @@ export default function DriverShift({
 
   const handleEndDuty = async () => {
     if (!caddyState) return
+    
+    // Revoke the active telemetry session token securely from the database
+    if (telemetrySessionTokenRef.current) {
+      try {
+        await supabase.rpc('revoke_telemetry_session', { p_raw_token: telemetrySessionTokenRef.current })
+      } catch (err) {
+        console.error('Failed to revoke telemetry session:', err)
+      }
+      telemetrySessionTokenRef.current = null
+    }
+
     await stopStreaming()
     saveDutyIntent(false)
 
@@ -662,46 +680,30 @@ export default function DriverShift({
           </div>
         </div>
 
-        <div className="h-[200px] lg:h-[260px] rounded-3xl overflow-hidden border border-slate-850">
+        <div className="h-[200px] lg:h-[260px] rounded-3xl overflow-hidden border border-slate-850 relative">
+          {showDebug && (
+            <div className="absolute inset-0 z-[999] bg-slate-950/95 p-3 overflow-y-auto text-[9px] font-mono text-green-400 text-left border border-red-500/50">
+              <div className="flex justify-between mb-2">
+                <span className="text-red-400 font-bold">DIAGNOSTIC TERMINAL</span>
+                <button onClick={() => { setDebugLogs([]); localStorage.removeItem('debug_logs') }} className="text-slate-400 underline">Clear</button>
+              </div>
+              {debugLogs.map((log, i) => (
+                <div key={i} className="mb-1 border-b border-slate-800 pb-1">{log}</div>
+              ))}
+            </div>
+          )}
+          {isDutyRunning && (
+            <button onClick={() => setShowDebug(!showDebug)} className="absolute top-2 right-2 z-[999] text-[10px] bg-red-500/80 text-white px-2 py-1 rounded shadow-lg border border-red-400/50">
+              DEBUG
+            </button>
+          )}
           <DriverMap
             mapTheme="dark"
             caddies={caddyState ? [caddyState] : []}
             routes={Object.values(ROUTES)}
             selectedRouteId={caddyState?.route_id}
-        {/* 2. Middle Map View */}
-        <div className="flex-1 w-full min-h-0 relative z-10 px-6 py-4 flex flex-col gap-4">
-          <div className="flex justify-between items-center mb-1">
-            <div className="flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-slate-400" />
-              <h3 className="text-sm font-bold text-slate-200">Current Zone</h3>
-            </div>
-            {isDutyRunning && (
-              <button onClick={() => setShowDebug(!showDebug)} className="text-xs bg-red-500/20 text-red-400 px-2 py-1 rounded border border-red-500/30">
-                DEBUG
-              </button>
-            )}
-          </div>
-          
-          <div className="h-[200px] lg:h-[260px] rounded-3xl overflow-hidden border border-slate-850 relative">
-            {showDebug && (
-              <div className="absolute inset-0 z-[999] bg-slate-950/95 p-3 overflow-y-auto text-[9px] font-mono text-green-400 text-left border border-red-500/50">
-                <div className="flex justify-between mb-2">
-                  <span className="text-red-400 font-bold">DIAGNOSTIC TERMINAL</span>
-                  <button onClick={() => { setDebugLogs([]); localStorage.removeItem('debug_logs') }} className="text-slate-400 underline">Clear</button>
-                </div>
-                {debugLogs.map((log, i) => (
-                  <div key={i} className="mb-1 border-b border-slate-800 pb-1">{log}</div>
-                ))}
-              </div>
-            )}
-            <DriverMap
-              mapTheme="dark"
-              caddies={caddyState ? [caddyState] : []}
-              routes={Object.values(ROUTES)}
-              selectedRouteId={caddyState?.route_id}
-              activeRoutePath={caddyState?.route_id === ROUTES.GATE_2.id ? ROUTE_PATHS.GATE_2 : ROUTE_PATHS.GATE_1}
-            />
-          </div>
+            activeRoutePath={caddyState?.route_id === ROUTES.GATE_2.id ? ROUTE_PATHS.GATE_2 : ROUTE_PATHS.GATE_1}
+          />
         </div>
 
         {/* Real-time Station Demand Feed */}
