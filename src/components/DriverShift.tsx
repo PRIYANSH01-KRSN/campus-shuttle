@@ -82,7 +82,27 @@ export default function DriverShift({
   const watchIdRef = useRef<string | number | null>(null)
   const wakeLockRef = useRef<any>(null)
   const lastTelemetryPushTimeRef = useRef<number>(0)
+  const gpsCbCountRef = useRef(0)
+  const [debugLogs, setDebugLogs] = useState<string[]>([])
+  const [showDebug, setShowDebug] = useState(false)
   const heartbeatIntervalRef = useRef<any>(null)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('debug_logs')
+      if (saved) setDebugLogs(JSON.parse(saved))
+    }
+  }, [])
+
+  const addLog = (msg: string) => {
+    const timestamp = new Date().toISOString().substring(11, 23)
+    const logEntry = `[${timestamp}] ${msg}`
+    setDebugLogs(prev => {
+      const updated = [logEntry, ...prev].slice(0, 100)
+      if (typeof window !== 'undefined') localStorage.setItem('debug_logs', JSON.stringify(updated))
+      return updated
+    })
+  }
   const lastGpsTimeRef = useRef<number>(Date.now())
   const activeCaddyRef = useRef<Caddy | null>(caddy)
   const dutyIntentRef = useRef(false)
@@ -201,47 +221,64 @@ export default function DriverShift({
 
   // Handle geolocation updates
   const handleGpsUpdate = async (position: GeolocationPosition | Position) => {
+    gpsCbCountRef.current += 1
     const lat = position.coords.latitude
     const lng = position.coords.longitude
+    const acc = position.coords.accuracy
+
+    addLog(`[GPS_NATIVE_CB] #${gpsCbCountRef.current} lat:${lat.toFixed(5)} acc:${Math.round(acc)}`)
     
     // Heading in degrees (default to 0 if not provided by browser/hardware)
     acceptLocation(lat, lng, position.coords.heading ?? lastLocationRef.current.heading ?? 0, position.coords.speed, position.coords.accuracy, position.timestamp)
 
     // Push telemetry synchronously directly from native OS callback event to bypass background throttling
     const now = Date.now()
-    if (now - lastTelemetryPushTimeRef.current > 2500 && streamingRef.current && activeCaddyRef.current) {
-      lastTelemetryPushTimeRef.current = now
-      if (lastLocationRef.current.lat === 0 && lastLocationRef.current.lng === 0) return
+    if (!streamingRef.current || !activeCaddyRef.current) return
 
-      const ping = {
-        lat: lastLocationRef.current.lat,
-        lng: lastLocationRef.current.lng,
-        speed: lastLocationRef.current.speed,
-        heading: lastLocationRef.current.heading,
-        status: 'ON_DUTY',
-        last_ping: new Date().toISOString()
-      }
+    if (now - lastTelemetryPushTimeRef.current <= 2500) {
+      addLog(`[TELEMETRY_THROTTLE] Skipped push`)
+      return
+    }
 
-      if (navigator.onLine) {
-        const { error: pushError } = await supabase
-          .from('caddies')
-          .update({
-            current_lat: ping.lat,
-            current_lng: ping.lng,
-            speed: ping.speed,
-            heading: ping.heading,
-            status: 'ON_DUTY',
-            last_ping: ping.last_ping
-          })
-          .eq('id', activeCaddyRef.current.id)
+    lastTelemetryPushTimeRef.current = now
+    if (lastLocationRef.current.lat === 0 && lastLocationRef.current.lng === 0) return
 
-        if (pushError) {
-          console.error('Supabase telemetry push error:', pushError)
-          onTelemetryLogged(ping)
-        }
-      } else {
+    const ping = {
+      lat: lastLocationRef.current.lat,
+      lng: lastLocationRef.current.lng,
+      speed: lastLocationRef.current.speed,
+      heading: lastLocationRef.current.heading,
+      status: 'ON_DUTY',
+      last_ping: new Date().toISOString()
+    }
+
+    if (navigator.onLine) {
+      addLog(`[DB_UPDATE_START] Ping: ${ping.last_ping}`)
+      const reqStart = Date.now()
+      const { error: pushError } = await supabase
+        .from('caddies')
+        .update({
+          current_lat: ping.lat,
+          current_lng: ping.lng,
+          speed: ping.speed,
+          heading: ping.heading,
+          status: 'ON_DUTY',
+          last_ping: ping.last_ping
+        })
+        .eq('id', activeCaddyRef.current.id)
+
+      const duration = Date.now() - reqStart
+
+      if (pushError) {
+        addLog(`[DB_UPDATE_FAIL] ${duration}ms Err: ${pushError.code}`)
+        console.error('Supabase telemetry push error:', pushError)
         onTelemetryLogged(ping)
+      } else {
+        addLog(`[DB_UPDATE_SUCCESS] ${duration}ms`)
       }
+    } else {
+      addLog(`[DB_UPDATE_FAIL] Offline`)
+      onTelemetryLogged(ping)
     }
   }
 
@@ -631,8 +668,40 @@ export default function DriverShift({
             caddies={caddyState ? [caddyState] : []}
             routes={Object.values(ROUTES)}
             selectedRouteId={caddyState?.route_id}
-            activeRoutePath={caddyState?.route_id === ROUTES.GATE_2.id ? ROUTE_PATHS.GATE_2 : ROUTE_PATHS.GATE_1}
-          />
+        {/* 2. Middle Map View */}
+        <div className="flex-1 w-full min-h-0 relative z-10 px-6 py-4 flex flex-col gap-4">
+          <div className="flex justify-between items-center mb-1">
+            <div className="flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-slate-400" />
+              <h3 className="text-sm font-bold text-slate-200">Current Zone</h3>
+            </div>
+            {isDutyRunning && (
+              <button onClick={() => setShowDebug(!showDebug)} className="text-xs bg-red-500/20 text-red-400 px-2 py-1 rounded border border-red-500/30">
+                DEBUG
+              </button>
+            )}
+          </div>
+          
+          <div className="h-[200px] lg:h-[260px] rounded-3xl overflow-hidden border border-slate-850 relative">
+            {showDebug && (
+              <div className="absolute inset-0 z-[999] bg-slate-950/95 p-3 overflow-y-auto text-[9px] font-mono text-green-400 text-left border border-red-500/50">
+                <div className="flex justify-between mb-2">
+                  <span className="text-red-400 font-bold">DIAGNOSTIC TERMINAL</span>
+                  <button onClick={() => { setDebugLogs([]); localStorage.removeItem('debug_logs') }} className="text-slate-400 underline">Clear</button>
+                </div>
+                {debugLogs.map((log, i) => (
+                  <div key={i} className="mb-1 border-b border-slate-800 pb-1">{log}</div>
+                ))}
+              </div>
+            )}
+            <DriverMap
+              mapTheme="dark"
+              caddies={caddyState ? [caddyState] : []}
+              routes={Object.values(ROUTES)}
+              selectedRouteId={caddyState?.route_id}
+              activeRoutePath={caddyState?.route_id === ROUTES.GATE_2.id ? ROUTE_PATHS.GATE_2 : ROUTE_PATHS.GATE_1}
+            />
+          </div>
         </div>
 
         {/* Real-time Station Demand Feed */}
