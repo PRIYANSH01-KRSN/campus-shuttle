@@ -81,7 +81,7 @@ export default function DriverShift({
   // Refs for tracking
   const watchIdRef = useRef<string | number | null>(null)
   const wakeLockRef = useRef<any>(null)
-  const telemetryIntervalRef = useRef<any>(null)
+  const lastTelemetryPushTimeRef = useRef<number>(0)
   const heartbeatIntervalRef = useRef<any>(null)
   const lastGpsTimeRef = useRef<number>(Date.now())
   const activeCaddyRef = useRef<Caddy | null>(caddy)
@@ -200,12 +200,49 @@ export default function DriverShift({
   }
 
   // Handle geolocation updates
-  const handleGpsUpdate = (position: GeolocationPosition | Position) => {
+  const handleGpsUpdate = async (position: GeolocationPosition | Position) => {
     const lat = position.coords.latitude
     const lng = position.coords.longitude
     
     // Heading in degrees (default to 0 if not provided by browser/hardware)
     acceptLocation(lat, lng, position.coords.heading ?? lastLocationRef.current.heading ?? 0, position.coords.speed, position.coords.accuracy, position.timestamp)
+
+    // Push telemetry synchronously directly from native OS callback event to bypass background throttling
+    const now = Date.now()
+    if (now - lastTelemetryPushTimeRef.current > 2500 && streamingRef.current && activeCaddyRef.current) {
+      lastTelemetryPushTimeRef.current = now
+      if (lastLocationRef.current.lat === 0 && lastLocationRef.current.lng === 0) return
+
+      const ping = {
+        lat: lastLocationRef.current.lat,
+        lng: lastLocationRef.current.lng,
+        speed: lastLocationRef.current.speed,
+        heading: lastLocationRef.current.heading,
+        status: 'ON_DUTY',
+        last_ping: new Date().toISOString()
+      }
+
+      if (navigator.onLine) {
+        const { error: pushError } = await supabase
+          .from('caddies')
+          .update({
+            current_lat: ping.lat,
+            current_lng: ping.lng,
+            speed: ping.speed,
+            heading: ping.heading,
+            status: 'ON_DUTY',
+            last_ping: ping.last_ping
+          })
+          .eq('id', activeCaddyRef.current.id)
+
+        if (pushError) {
+          console.error('Supabase telemetry push error:', pushError)
+          onTelemetryLogged(ping)
+        }
+      } else {
+        onTelemetryLogged(ping)
+      }
+    }
   }
 
   const handleGpsError = (err: GeolocationPositionError) => {
@@ -345,44 +382,6 @@ export default function DriverShift({
         }, 5000)
       }
     }
-
-    // 3. Start 2.5-second push interval (geofence validation already handles filtering coordinates)
-    telemetryIntervalRef.current = setInterval(async () => {
-      // Skip push if no real GPS fix has been acquired yet
-      if (lastLocationRef.current.lat === 0 && lastLocationRef.current.lng === 0) return
-
-      const ping = {
-        lat: lastLocationRef.current.lat,
-        lng: lastLocationRef.current.lng,
-        speed: lastLocationRef.current.speed,
-        heading: lastLocationRef.current.heading,
-        status: 'ON_DUTY',
-        last_ping: new Date().toISOString()
-      }
-
-      // Check online status
-      if (navigator.onLine) {
-        const { error: pushError } = await supabase
-          .from('caddies')
-          .update({
-            current_lat: ping.lat,
-            current_lng: ping.lng,
-            speed: ping.speed,
-            heading: ping.heading,
-            status: 'ON_DUTY',
-            last_ping: ping.last_ping
-          })
-          .eq('id', activeCaddy.id)
-
-        if (pushError) {
-          // Push failed: log to IndexedDB buffer
-          onTelemetryLogged(ping)
-        }
-      } else {
-        // Offline: save to IndexedDB buffer
-        onTelemetryLogged(ping)
-      }
-    }, 2500)
   }
 
   startStreamingRef.current = startStreaming
@@ -390,10 +389,6 @@ export default function DriverShift({
   const stopStreaming = async () => {
     streamingRef.current = false
     // 1. Clear intervals & watchers
-    if (telemetryIntervalRef.current) {
-      clearInterval(telemetryIntervalRef.current)
-      telemetryIntervalRef.current = null
-    }
     if (heartbeatIntervalRef.current) {
       clearInterval(heartbeatIntervalRef.current)
       heartbeatIntervalRef.current = null

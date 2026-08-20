@@ -146,11 +146,15 @@ export default function StudentPortal() {
   // Data Fetching
   const fetchBaseData = async () => {
     try {
-      const { data: routesData } = await supabase.from('routes').select('*')
-      const { data: stationsData } = await supabase.from('campus_stations').select('*')
+      const { data: routesData, error: routesError } = await supabase.from('routes').select('*')
+      const { data: stationsData, error: stationsError } = await supabase.from('campus_stations').select('*')
       const { data: caddiesData, error: caddiesError } = await supabase.from('caddies').select('*')
-      const { data: pathsData } = await supabase.from('route_paths').select('*')
+      const { data: pathsData, error: pathsError } = await supabase.from('route_paths').select('*')
       const { data: adsData } = await supabase.from('ad_banners').select('*').eq('is_active', true)
+
+      if (routesError || stationsError || caddiesError || pathsError) {
+        throw new Error("Failed to fetch from Supabase")
+      }
 
       if (routesData && routesData.length > 0) {
         setRoutes(routesData)
@@ -195,12 +199,13 @@ export default function StudentPortal() {
       if (adsData && adsData.length > 0) {
         setAdBanners(adsData)
         if (!currentAd) {
-          const randomIndex = Math.floor(Math.random() * adsData.length)
-          setCurrentAd(adsData[randomIndex])
+          setCurrentAd(adsData[Math.floor(Math.random() * adsData.length)])
         }
       }
-    } catch (err) {
-      console.error('Failed to query tables:', err)
+      return true
+    } catch (error) {
+      console.error('Error fetching base data:', error)
+      return false
     }
   }
 
@@ -225,7 +230,13 @@ export default function StudentPortal() {
   const handleRefreshLiveLocation = async () => {
     if (isRefreshing) return
     setIsRefreshing(true)
-    await fetchBaseData()
+    const success = await fetchBaseData()
+    if (success) {
+      setShowStatusBanner({ type: 'success', text: 'Live location refreshed' })
+    } else {
+      setShowStatusBanner({ type: 'error', text: 'Failed to refresh location' })
+    }
+    setTimeout(() => setShowStatusBanner(null), 3000)
     setIsRefreshing(false)
   }
 
