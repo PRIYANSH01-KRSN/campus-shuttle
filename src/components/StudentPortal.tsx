@@ -110,6 +110,43 @@ export default function StudentPortal() {
   const [currentAd, setCurrentAd] = useState<AdBanner | null>(null)
   const adImpressionTracked = useRef<string | null>(null)
 
+  // PWA Install State
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null)
+  const [showInstallBanner, setShowInstallBanner] = useState(false)
+  const [isIOS, setIsIOS] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    // Check if app is already in standalone mode
+    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true) {
+      return // Already installed
+    }
+    
+    // Check if it's iOS
+    const ua = window.navigator.userAgent
+    const ios = !!ua.match(/iPad/i) || !!ua.match(/iPhone/i)
+    setIsIOS(ios)
+    
+    // Check session storage to see if they dismissed it THIS session
+    const hiddenThisSession = sessionStorage.getItem('hideInstallPrompt') === 'true'
+    
+    if (ios && !hiddenThisSession) {
+      setShowInstallBanner(true)
+    }
+
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault() // Prevent the mini-infobar from appearing on mobile
+      setDeferredPrompt(e)
+      if (!hiddenThisSession) {
+        setShowInstallBanner(true)
+      }
+    }
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
+  }, [])
+
   useEffect(() => {
     // Initialize theme
     setMapTheme(getMapTheme())
@@ -481,9 +518,58 @@ export default function StudentPortal() {
     return `${mins}m ${secs}s`
   }
 
+    const handleInstallClick = async () => {
+      if (isIOS) {
+        alert("To install on iOS: Tap the Share button below and select 'Add to Home Screen'")
+        return
+      }
+      if (deferredPrompt) {
+        deferredPrompt.prompt()
+        const { outcome } = await deferredPrompt.userChoice
+        if (outcome === 'accepted') {
+          setDeferredPrompt(null)
+          setShowInstallBanner(false)
+        }
+      }
+    }
+
+    const handleDismissInstall = () => {
+      setShowInstallBanner(false)
+      sessionStorage.setItem('hideInstallPrompt', 'true')
+    }
+
   return (
     <div className={`w-full h-screen ${colors.bg} flex flex-col overflow-hidden relative select-none`}>
       
+      {/* PWA Install Banner */}
+      {showInstallBanner && (
+        <div className={`absolute top-20 left-4 right-4 z-[9999] p-3 rounded-2xl border shadow-xl flex items-center justify-between gap-3 backdrop-blur-xl ${
+          mapTheme === 'dark' ? 'bg-black/60 border-white/10' : 'bg-white/80 border-slate-200'
+        }`}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-black dark:bg-white flex items-center justify-center shrink-0">
+              <Bus className="w-6 h-6 text-white dark:text-black" />
+            </div>
+            <div className="flex flex-col">
+              <span className={`text-sm font-bold ${colors.text}`}>SNU Shuttle App</span>
+              <span className={`text-[10px] ${colors.textSecondary}`}>Install for a better experience</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={handleInstallClick}
+              className="px-4 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition-transform active:scale-95"
+            >
+              Install
+            </button>
+            <button onClick={handleDismissInstall} className={`p-1 rounded-full ${colors.textMuted} hover:bg-black/5`}>
+              <span className="sr-only">Dismiss</span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 1. Status Banner */}
       {showStatusBanner && (
         <div className={`absolute top-20 left-4 right-4 z-[9999] p-3 rounded-xl border shadow-xl flex items-center gap-3 backdrop-blur-md animate-bounce ${

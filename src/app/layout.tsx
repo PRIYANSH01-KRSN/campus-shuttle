@@ -15,6 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Campus Shuttle Tracking System",
   description: "Live caddy and shuttle tracker for Shiv Nadar University campus",
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({
