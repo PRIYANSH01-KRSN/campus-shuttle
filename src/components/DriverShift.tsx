@@ -315,6 +315,7 @@ export default function DriverShift({
       streamingRef.current = false
       saveDutyIntent(false)
       console.error('Failed to create telemetry session:', err)
+      alert(`Start Duty Failed: ${err.message || JSON.stringify(err)}`)
       return
     }
 
@@ -377,11 +378,13 @@ export default function DriverShift({
           requestPermissions: true,
           stale: false,
           distanceFilter: 10,
+          minIntervalMs: 10000,
           url: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/rpc/update_caddy_telemetry`,
           headers: {
             'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${sessionToken}`
+            'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+            'x-telemetry-token': sessionToken
           }
         }, (loc: any, error) => {
           if (error) {

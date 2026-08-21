@@ -320,9 +320,6 @@ const MemoizedStationMarkers = React.memo(function MemoizedStationMarkersCompone
                   className={`flex justify-between items-center ${colors.textSecondary} text-[10px]`}
                 >
                   <span>Stop #{station.stop_order}</span>
-                  <span className="bg-teal-500/20 text-teal-600 dark:text-teal-400 px-1.5 py-0.5 rounded font-bold">
-                    {station.waiting_count ?? 0} waiting
-                  </span>
                 </div>
               </div>
             </Popup>

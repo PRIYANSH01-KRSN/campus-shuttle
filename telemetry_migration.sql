@@ -27,7 +27,7 @@ CREATE OR REPLACE FUNCTION public.create_telemetry_session(
 ) RETURNS TEXT
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_catalog
+SET search_path = public, extensions, pg_catalog
 AS $$
 DECLARE
     v_driver_id UUID;
@@ -55,7 +55,7 @@ BEGIN
 
     -- Generate UUIDv4 raw token & hash it (SHA-256)
     v_raw_token := gen_random_uuid()::text;
-    v_token_hash := encode(digest(v_raw_token, 'sha256'), 'hex');
+    v_token_hash := encode(digest(v_raw_token, 'sha256'::text), 'hex');
 
     -- Persist ONLY the hash
     INSERT INTO public.telemetry_sessions (token_hash, driver_id, caddy_id, expires_at)
@@ -68,12 +68,14 @@ $$;
 -- =======================================================================================
 -- RPC: INGEST TELEMETRY (Target for Native Webhook)
 -- =======================================================================================
+DROP FUNCTION IF EXISTS public.update_caddy_telemetry(FLOAT, FLOAT, FLOAT, FLOAT, FLOAT, BIGINT, TEXT, BOOLEAN, FLOAT, FLOAT) CASCADE;
+
 CREATE OR REPLACE FUNCTION public.update_caddy_telemetry(
     latitude FLOAT,
     longitude FLOAT,
     accuracy FLOAT DEFAULT NULL,
     speed FLOAT DEFAULT NULL,
-    heading FLOAT DEFAULT NULL,
+    bearing FLOAT DEFAULT NULL,
     "time" BIGINT DEFAULT NULL,
     source TEXT DEFAULT NULL,
     simulated BOOLEAN DEFAULT FALSE,
@@ -82,7 +84,7 @@ CREATE OR REPLACE FUNCTION public.update_caddy_telemetry(
 ) RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_catalog
+SET search_path = public, extensions, pg_catalog
 AS $$
 DECLARE
     v_headers JSON;
@@ -99,15 +101,15 @@ BEGIN
         RAISE EXCEPTION 'Unable to read headers';
     END;
     
-    v_auth_header := v_headers->>'authorization';
+    v_auth_header := v_headers->>'x-telemetry-token';
 
-    IF v_auth_header IS NULL OR NOT v_auth_header ILIKE 'Bearer %' THEN
-        RAISE EXCEPTION 'Missing or invalid Authorization header';
+    IF v_auth_header IS NULL THEN
+        RAISE EXCEPTION 'Missing X-Telemetry-Token header';
     END IF;
 
     -- Hash incoming token
-    v_raw_token := substring(v_auth_header from 8);
-    v_token_hash := encode(digest(v_raw_token, 'sha256'), 'hex');
+    v_raw_token := v_auth_header;
+    v_token_hash := encode(digest(v_raw_token, 'sha256'::text), 'hex');
 
     -- Server-Authoritative Target (No client caddy_id parameter)
     SELECT caddy_id INTO v_caddy_id
@@ -124,7 +126,7 @@ BEGIN
         current_lat = latitude,
         current_lng = longitude,
         speed = update_caddy_telemetry.speed,
-        heading = update_caddy_telemetry.heading,
+        heading = update_caddy_telemetry.bearing,
         last_ping = now(), -- Server-authoritative timestamp
         status = 'ON_DUTY'
     WHERE id = v_caddy_id;
@@ -139,12 +141,12 @@ CREATE OR REPLACE FUNCTION public.revoke_telemetry_session(
 ) RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_catalog
+SET search_path = public, extensions, pg_catalog
 AS $$
 DECLARE
     v_token_hash TEXT;
 BEGIN
-    v_token_hash := encode(digest(p_raw_token, 'sha256'), 'hex');
+    v_token_hash := encode(digest(p_raw_token, 'sha256'::text), 'hex');
     DELETE FROM public.telemetry_sessions WHERE token_hash = v_token_hash;
 END;
 $$;
