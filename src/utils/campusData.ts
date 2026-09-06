@@ -49,26 +49,28 @@ export const STATIONS: Record<string, StationPreset[]> = {
   // Loop: Gate 1 → inner gate → chilika 1b(cluster 1) → Cluster 5 → Cluster 4 → G Block → Gate 1
   GATE_1: [
     { name: 'Gate 1',            lat: 28.533180530044106, lng: 77.57664699610052, stop_order: 1 },
-    { name: 'Cluster 5',         lat: 28.5225, lng: 77.5703, stop_order: 2 },
-    { name: 'Cluster 4',         lat: 28.5235, lng: 77.5706, stop_order: 3 },
-    { name: 'inner gate',            lat: 28.525575, lng: 77.571672, stop_order: 4 },
-    { name: 'chilika 1b(cluster 1)', lat: 28.5242, lng: 77.5731, stop_order: 5 },
-    { name: 'G Block',           lat: 28.528177747494905, lng: 77.57449105362907, stop_order: 6 },
+    { name: 'Cluster 6',         lat: 28.5214722, lng: 77.5728333, stop_order: 2 },
+    { name: 'Cluster 5',         lat: 28.5225, lng: 77.5703, stop_order: 3 },
+    { name: 'Cluster 4',         lat: 28.5235, lng: 77.5706, stop_order: 4 },
+    { name: 'inner gate',            lat: 28.525575, lng: 77.571672, stop_order: 5 },
+    { name: 'chilika 1b(cluster 1)', lat: 28.5242, lng: 77.5731, stop_order: 6 },
+    { name: 'G Block',           lat: 28.528177747494905, lng: 77.57449105362907, stop_order: 7 },
   ],
 
   // Gate 2 Route — 10 stops
   // Loop: Gate 2 → Cluster 5 → Cluster 4 → inner gate → chilika 1b(cluster 1) → D Block → C Block → B Block → A Block → Towers → Gate 2
   GATE_2: [
     { name: 'Gate 2',            lat: 28.53076962815911, lng: 77.58093845170927, stop_order: 1 },
-    { name: 'Cluster 5',         lat: 28.5225, lng: 77.5703, stop_order: 2 },
-    { name: 'Cluster 4',         lat: 28.5235, lng: 77.5706, stop_order: 3 },
-    { name: 'inner gate',            lat: 28.525575, lng: 77.571672, stop_order: 4 },
-    { name: 'chilika 1b(cluster 1)', lat: 28.5242, lng: 77.5731, stop_order: 5 },
-    { name: 'D Block',           lat: 28.5254, lng: 77.5753, stop_order: 6 },
-    { name: 'C Block',           lat: 28.5261, lng: 77.5757, stop_order: 7 },
-    { name: 'B Block',           lat: 28.5266, lng: 77.5763, stop_order: 8 },
-    { name: 'A Block',           lat: 28.5269, lng: 77.5771, stop_order: 9 },
-    { name: 'Towers',            lat: 28.5298, lng: 77.5791, stop_order: 10 },
+    { name: 'Cluster 6',         lat: 28.5214722, lng: 77.5728333, stop_order: 2 },
+    { name: 'Cluster 5',         lat: 28.5225, lng: 77.5703, stop_order: 3 },
+    { name: 'Cluster 4',         lat: 28.5235, lng: 77.5706, stop_order: 4 },
+    { name: 'inner gate',            lat: 28.525575, lng: 77.571672, stop_order: 5 },
+    { name: 'chilika 1b(cluster 1)', lat: 28.5242, lng: 77.5731, stop_order: 6 },
+    { name: 'D Block',           lat: 28.5254, lng: 77.5753, stop_order: 7 },
+    { name: 'C Block',           lat: 28.5261, lng: 77.5757, stop_order: 8 },
+    { name: 'B Block',           lat: 28.5266, lng: 77.5763, stop_order: 9 },
+    { name: 'A Block',           lat: 28.5269, lng: 77.5771, stop_order: 10 },
+    { name: 'Towers',            lat: 28.5298, lng: 77.5791, stop_order: 11 },
   ],
 }
 
@@ -79,6 +81,7 @@ export const STATIONS: Record<string, StationPreset[]> = {
 export const ROUTE_PATHS: Record<string, [number, number][]> = {
   GATE_1: [
     [28.533180530044106, 77.57664699610052], // Gate 1
+    [28.5214722, 77.5728333], // Cluster 6
     [28.5225, 77.5703], // Cluster 5
     [28.5235, 77.5706], // Cluster 4
     [28.525575, 77.571672], // Inner Gate
@@ -89,6 +92,7 @@ export const ROUTE_PATHS: Record<string, [number, number][]> = {
 
   GATE_2: [
     [28.53076962815911, 77.58093845170927],  // Gate 2
+    [28.5214722, 77.5728333], // Cluster 6
     [28.5225, 77.5703], // Cluster 5
     [28.5235, 77.5706], // Cluster 4
     [28.525575, 77.571672], // Inner Gate

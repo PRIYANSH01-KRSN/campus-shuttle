@@ -213,6 +213,7 @@ export default function StudentMap({
           url={tileConfig.url}
           attribution={tileConfig.attribution}
           maxZoom={19}
+          className={mapTheme === 'dark' ? 'dark-map-tiles' : ''}
         />
 
         {/* Student position is intentionally rendered in its own layer and is
