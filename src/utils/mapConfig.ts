@@ -41,8 +41,8 @@ export const SNU_CAMPUS = {
 const THEME_STORAGE_KEY = 'shuttle-map-theme'
 
 export function getMapTheme(): MapTheme {
-  if (typeof window === 'undefined') return 'dark'
-  return (localStorage.getItem(THEME_STORAGE_KEY) as MapTheme) || 'dark'
+  if (typeof window === 'undefined') return 'light'
+  return (localStorage.getItem(THEME_STORAGE_KEY) as MapTheme) || 'light'
 }
 
 export function setMapTheme(theme: MapTheme): void {
