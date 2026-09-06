@@ -7,7 +7,7 @@ import * as turf from '@turf/turf'
 import {
   Navigation, CheckCircle2, AlertCircle, Clock,
   MapPin, Route, Sun, Moon, Wifi, WifiOff,
-  ChevronUp, Crosshair, Building2, ExternalLink, Bus, RefreshCw
+  ChevronUp, Crosshair, Building2, ExternalLink, Bus, RefreshCw, Info
 } from 'lucide-react'
 import { MapTheme, getMapTheme, setMapTheme as setMapThemeLS, getThemeColors } from '@/utils/mapConfig'
 import {
@@ -648,9 +648,18 @@ export default function StudentPortal() {
         {/* Empty State Overlay */}
         {activeCaddiesList.length === 0 && (
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-[900]">
-            <div className={`px-6 py-4 rounded-2xl ${colors.bgCard} border ${colors.borderAccent} shadow-2xl flex flex-col items-center gap-3 animate-pulse`}>
+            <div className={`px-6 py-4 rounded-2xl ${colors.bgCard} border ${colors.borderAccent} shadow-2xl flex flex-col items-center gap-3 animate-pulse pointer-events-auto`}>
               <Bus className={`w-8 h-8 ${colors.textMuted}`} />
-              <span className={`text-sm font-bold ${colors.text}`}>No caddies currently on active duty</span>
+              <div className="flex items-center gap-2 relative group cursor-help">
+                <span className={`text-sm font-bold ${colors.text}`}>No caddies currently on active duty</span>
+                <Info className={`w-4 h-4 ${colors.textMuted}`} />
+                
+                {/* Tooltip */}
+                <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-56 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 text-xs p-2.5 rounded-xl text-center shadow-lg z-50">
+                  If shuttles are currently running, drivers may need to enable location sharing on their device.
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-[6px] border-transparent border-t-slate-800 dark:border-t-slate-200"></div>
+                </div>
+              </div>
             </div>
           </div>
         )}
