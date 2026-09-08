@@ -142,6 +142,7 @@ export default function AdminPortal({ onLogout }: { onLogout?: () => void }) {
   const [newAdTargetUrl, setNewAdTargetUrl] = useState('')
   const [adFormLoading, setAdFormLoading] = useState(false)
   const [adFormError, setAdFormError] = useState<string | null>(null)
+  const [editingAdId, setEditingAdId] = useState<string | null>(null)
 
   // Fetch all initial data
   const fetchData = async () => {
@@ -579,24 +580,46 @@ export default function AdminPortal({ onLogout }: { onLogout?: () => void }) {
     if (!newAdTitle || !newAdSponsor || !newAdImageUrl || !newAdTargetUrl) return
     setAdFormLoading(true)
     setAdFormError(null)
-    const { error } = await supabase.from('ad_banners').insert({
-      title: newAdTitle,
-      sponsor_name: newAdSponsor,
-      image_url: newAdImageUrl,
-      target_url: newAdTargetUrl,
-      is_active: true,
-      impressions: 0,
-      clicks: 0,
-    })
-    setAdFormLoading(false)
-    if (error) {
-      setAdFormError(error.message)
+    
+    if (editingAdId) {
+      const { error } = await supabase.from('ad_banners').update({
+        title: newAdTitle,
+        sponsor_name: newAdSponsor,
+        image_url: newAdImageUrl,
+        target_url: newAdTargetUrl,
+      }).eq('id', editingAdId)
+      
+      setAdFormLoading(false)
+      if (error) {
+        setAdFormError(error.message)
+      } else {
+        setEditingAdId(null)
+        setNewAdTitle('')
+        setNewAdSponsor('')
+        setNewAdImageUrl('')
+        setNewAdTargetUrl('')
+        fetchData()
+      }
     } else {
-      setNewAdTitle('')
-      setNewAdSponsor('')
-      setNewAdImageUrl('')
-      setNewAdTargetUrl('')
-      fetchData()
+      const { error } = await supabase.from('ad_banners').insert({
+        title: newAdTitle,
+        sponsor_name: newAdSponsor,
+        image_url: newAdImageUrl,
+        target_url: newAdTargetUrl,
+        is_active: true,
+        impressions: 0,
+        clicks: 0,
+      })
+      setAdFormLoading(false)
+      if (error) {
+        setAdFormError(error.message)
+      } else {
+        setNewAdTitle('')
+        setNewAdSponsor('')
+        setNewAdImageUrl('')
+        setNewAdTargetUrl('')
+        fetchData()
+      }
     }
   }
 
@@ -1219,7 +1242,21 @@ export default function AdminPortal({ onLogout }: { onLogout?: () => void }) {
                 <div className="bg-slate-900 border border-slate-850 rounded-2xl p-5.5 space-y-4">
                   <div className="flex items-center gap-2 border-b border-slate-850 pb-3">
                     <DollarSign className="w-4 h-4 text-emerald-400" />
-                    <h3 className="font-bold text-sm text-white uppercase tracking-wider">New Ad Campaign</h3>
+                    <h3 className="font-bold text-sm text-white uppercase tracking-wider">{editingAdId ? 'Edit Ad Campaign' : 'New Ad Campaign'}</h3>
+                    {editingAdId && (
+                      <button 
+                        onClick={() => {
+                          setEditingAdId(null)
+                          setNewAdTitle('')
+                          setNewAdSponsor('')
+                          setNewAdImageUrl('')
+                          setNewAdTargetUrl('')
+                        }}
+                        className="ml-auto text-xs text-slate-400 hover:text-white"
+                      >
+                        Cancel Edit
+                      </button>
+                    )}
                   </div>
 
                   <form onSubmit={handleAddBanner} className="space-y-4 text-xs">
@@ -1301,9 +1338,55 @@ export default function AdminPortal({ onLogout }: { onLogout?: () => void }) {
 
                   <div className="border-t border-slate-850 pt-3 space-y-1">
                     <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wide">Active Campaigns</p>
-                    <p className="text-[10px] text-slate-600">
+                    <p className="text-[10px] text-slate-600 mb-3">
                       {adBanners.filter(a => a.is_active).length} of {adBanners.length} banners live
                     </p>
+                    
+                    <div className="mt-4 space-y-3 max-h-[300px] overflow-y-auto pr-2">
+                      {adBanners.map(ad => (
+                        <div key={ad.id} className="bg-slate-950 border border-slate-850 rounded-xl p-3 flex justify-between items-center text-xs">
+                          <div className="flex gap-3 items-center">
+                            <img src={ad.image_url} className="w-12 h-12 object-cover rounded-lg border border-slate-800" onError={(e) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/150' }} />
+                            <div>
+                              <div className="font-bold text-white max-w-[120px] truncate">{ad.title}</div>
+                              <div className="text-[10px] text-slate-500 truncate max-w-[120px]">{ad.sponsor_name}</div>
+                              <div className="text-[9px] text-slate-600 mt-0.5">👁 {ad.impressions} | 👆 {ad.clicks}</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => handleToggleAdActive(ad)}
+                              className={`px-2 py-1.5 rounded text-[9px] font-bold uppercase transition-colors ${ad.is_active ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}
+                            >
+                              {ad.is_active ? 'Live' : 'Paused'}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingAdId(ad.id)
+                                setNewAdTitle(ad.title)
+                                setNewAdSponsor(ad.sponsor_name)
+                                setNewAdImageUrl(ad.image_url)
+                                setNewAdTargetUrl(ad.target_url)
+                              }}
+                              className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 transition-all border border-slate-700"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (confirm('Delete this banner?')) {
+                                  await supabase.from('ad_banners').delete().eq('id', ad.id)
+                                  fetchData()
+                                }
+                              }}
+                              className="p-1.5 bg-rose-500/10 hover:bg-rose-600 rounded-lg text-rose-400 hover:text-white transition-all border border-rose-500/20"
+                            >
+                              <Trash className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}

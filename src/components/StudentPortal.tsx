@@ -847,8 +847,15 @@ export default function StudentPortal() {
                 }}
                 className={`mt-6 w-full rounded-2xl overflow-hidden border ${colors.borderAccent} cursor-pointer group shadow-sm hover:shadow-md transition-shadow bg-black/5 dark:bg-white/5`}
               >
-                <div className="relative h-24 w-full">
-                  <img src={currentAd.image_url} alt={currentAd.title} className="w-full h-full object-cover" />
+                <div className="relative h-24 w-full bg-slate-800">
+                  <img 
+                    src={currentAd.image_url} 
+                    alt={currentAd.title} 
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = 'https://via.placeholder.com/600x200?text=Sponsor+Banner'
+                    }}
+                  />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
                   <div className="absolute bottom-2 left-3 right-3 flex items-end justify-between">
                     <div>
