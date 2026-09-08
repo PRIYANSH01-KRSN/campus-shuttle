@@ -48,6 +48,7 @@ interface StudentMapProps {
   activeRoutePath: [number, number][]
   selectedStationId: string | null
   onSelectStation: (station: Station) => void
+  onSelectCaddy?: (caddy: Caddy) => void
   onMapClick: () => void
   onRecenterCampus?: () => void
   mapRef: React.MutableRefObject<any>
@@ -121,6 +122,7 @@ export default function StudentMap({
   activeRoutePath,
   selectedStationId,
   onSelectStation,
+  onSelectCaddy,
   onMapClick,
   mapRef,
   userLocation = null,
@@ -245,6 +247,7 @@ export default function StudentMap({
           activeCaddies={animatedCaddies}
           routes={routes} 
           getCaddyIcon={getCaddyIcon}
+          onSelectCaddy={onSelectCaddy}
           colors={colors}
         />
       </MapContainer>
@@ -337,7 +340,7 @@ const MemoizedStationMarkers = React.memo(function MemoizedStationMarkersCompone
   return true;
 })
 
-const MemoizedCaddyMarkers = React.memo(function MemoizedCaddyMarkersComponent({ activeCaddies, routes, getCaddyIcon, colors }: any) {
+const MemoizedCaddyMarkers = React.memo(function MemoizedCaddyMarkersComponent({ activeCaddies, routes, getCaddyIcon, onSelectCaddy, colors }: any) {
   return (
     <>
       {activeCaddies.map((caddy: any) => {
@@ -354,48 +357,15 @@ const MemoizedCaddyMarkers = React.memo(function MemoizedCaddyMarkersComponent({
             key={caddy.id}
             position={[caddy.current_lat!, caddy.current_lng!]}
             icon={getCaddyIcon(caddy, isStale)}
-          >
-            <Popup className="custom-leaflet-popup">
-              <div
-                className={`${colors.bgCard} ${colors.text} p-3 rounded-xl border ${colors.borderAccent} space-y-2 font-sans min-w-[170px] text-xs shadow-lg`}
-              >
-                <div
-                  className={`flex justify-between items-center border-b ${colors.border} pb-1.5`}
-                >
-                  <span className="font-bold text-sm">{caddy.name}</span>
-                  <span
-                    className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${
-                      isStale
-                        ? 'bg-rose-500/10 text-rose-500 dark:text-rose-400'
-                        : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                    }`}
-                  >
-                    {isStale ? 'Signal Lost' : 'Live'}
-                  </span>
-                </div>
-                <div
-                  className={`space-y-1 text-[11px] ${colors.textSecondary}`}
-                >
-                  <div className="flex justify-between">
-                    <span>Route:</span>
-                    <span
-                      className={`font-medium ${colors.text} truncate max-w-[100px]`}
-                    >
-                      {assignedRoute ? assignedRoute.name : 'Unassigned'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Speed:</span>
-                    <span className={`font-medium ${colors.text}`}>
-                      {caddy.speed
-                        ? `${Math.round(caddy.speed)} km/h`
-                        : '0 km/h'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </Popup>
-          </Marker>
+            eventHandlers={{
+              click: (e) => {
+                L.DomEvent.stopPropagation(e)
+                if (onSelectCaddy) {
+                  onSelectCaddy(caddy)
+                }
+              },
+            }}
+          />
         )
       })}
     </>

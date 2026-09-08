@@ -117,8 +117,8 @@ export const DEFAULT_CADDIES = [
 
 export const CADDY_SPEED_KMH = 15              // Average cruising speed for ETA calculation
 export const STOP_DELAY_MINUTES = 0.75          // 45 seconds per intermediate stop
-export const STALE_THRESHOLD_MS = 60000         // 60s — caddy hidden from student map
-export const STALE_MARKER_THRESHOLD_MS = 45000  // 45s — marker shown as "Signal Lost"
+export const STALE_THRESHOLD_MS = 900000        // 15m (900000ms) — caddy hidden from student map
+export const STALE_MARKER_THRESHOLD_MS = 300000 // 5m (300000ms) — marker shown as "Signal Lost"
 export const GEOFENCE_SPEED_LIMIT_KMH = 40      // km/h max (pings above this discarded)
 export const ANTI_IDLE_DISTANCE_M = 25          // meters from nearest station for anti-idle alert
 export const WAIT_FLAG_TTL_MS = 10 * 60 * 1000  // 10-minute wait flag expiry

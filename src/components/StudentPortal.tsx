@@ -13,6 +13,7 @@ import { MapTheme, getMapTheme, setMapTheme as setMapThemeLS, getThemeColors } f
 import {
   CAMPUS_CENTER,
   STALE_THRESHOLD_MS,
+  STALE_MARKER_THRESHOLD_MS,
   WAIT_FLAG_TTL_MS,
   STATION_PROXIMITY_M,
   POLLING_INTERVAL_MS,
@@ -98,6 +99,7 @@ export default function StudentPortal() {
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null)
   const [activeRoutePath, setActiveRoutePath] = useState<LatLng[]>([])
   const [selectedStation, setSelectedStation] = useState<Station | null>(null)
+  const [selectedCaddy, setSelectedCaddy] = useState<Caddy | null>(null)
 
   // Interaction State
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -631,12 +633,19 @@ export default function StudentPortal() {
           activeRoutePath={activeRoutePath}
           selectedStationId={selectedStation ? selectedStation.id : null}
           onSelectStation={(station) => {
+            setSelectedCaddy(null)
             setSelectedStation(station)
             setDrawerOpen(true)
           }}
+          onSelectCaddy={(caddy: Caddy) => {
+            setSelectedStation(null)
+            setSelectedCaddy(caddy)
+            setDrawerOpen(true)
+          }}
           onMapClick={() => {
-            if (selectedStation) {
+            if (selectedStation || selectedCaddy) {
               setSelectedStation(null)
+              setSelectedCaddy(null)
               setDrawerOpen(false)
             }
           }}
@@ -803,9 +812,29 @@ export default function StudentPortal() {
                 </div>
 
               </div>
+            ) : selectedCaddy ? (
+              <div className="space-y-6">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h2 className={`text-xl font-black ${colors.text}`}>{selectedCaddy.name}</h2>
+                    <div className="flex gap-2 mt-2">
+                      <span className={`text-xs px-2 py-1 rounded-md font-bold text-white shadow-sm`} style={{ backgroundColor: routes.find(r => r.id === selectedCaddy.route_id)?.color || '#3b82f6' }}>
+                        {routes.find(r => r.id === selectedCaddy.route_id)?.name || 'Unassigned'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className={`px-3 py-1.5 rounded-xl text-xs font-bold ${
+                    Date.now() - new Date(selectedCaddy.last_ping).getTime() > (STALE_MARKER_THRESHOLD_MS || 300000)
+                      ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20' 
+                      : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                  }`}>
+                    {Date.now() - new Date(selectedCaddy.last_ping).getTime() > (STALE_MARKER_THRESHOLD_MS || 300000) ? 'Signal Lost' : 'Live'}
+                  </div>
+                </div>
+              </div>
             ) : (
               <div className={`py-8 text-center text-sm font-medium ${colors.textSecondary} border border-dashed ${colors.borderAccent} rounded-2xl`}>
-                Select a stop on the map to see details.
+                Select a stop or shuttle on the map to see details.
               </div>
             )}
 
