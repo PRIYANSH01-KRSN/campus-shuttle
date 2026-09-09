@@ -21,6 +21,7 @@ interface Caddy {
   name: string
   route_id: string | null
   current_driver_id: string | null
+  driver_name?: string | null
   status: 'OFF_DUTY' | 'ON_DUTY' | 'ON_BREAK' | 'IN_MAINTENANCE'
   current_lat: number | null
   current_lng: number | null
@@ -296,10 +297,11 @@ export default function DriverPortal() {
         return
       }
 
-      // 2. Fetch all caddies to let the driver choose
-      const { data: caddiesData, error: caddiesError } = await supabase
-        .from('caddies')
-        .select('*')
+      // 2. Fetch all caddies and driver profiles to let the driver choose
+      const [{ data: caddiesData, error: caddiesError }, { data: driversData }] = await Promise.all([
+        supabase.from('caddies').select('*').order('name', { ascending: true }),
+        supabase.from('profiles').select('id, full_name').eq('role', 'driver')
+      ])
 
       if (caddiesError) {
         setAuthError(`Could not load vehicle assignment: ${caddiesError.message}`)
@@ -311,13 +313,22 @@ export default function DriverPortal() {
         setAuthError('No caddies available in the system. Please contact the transport administrator.')
         return
       }
-      const caddiesToOffer = caddyRows
+
+      const driverMap = new Map((driversData || []).map((d: any) => [d.id, d.full_name]))
+      const caddiesToOffer: Caddy[] = caddyRows.map((c: any) => ({
+        ...c,
+        driver_name: c.current_driver_id ? (driverMap.get(c.current_driver_id) || null) : null
+      }))
 
       setDriverProfile(profile)
       setAvailableCaddies(caddiesToOffer)
-      // If there's more than one caddy available, require the driver to deliberately
-      // choose today's vehicle rather than silently taking the first one.
-      setAssignedCaddy(caddiesToOffer.length === 1 ? caddiesToOffer[0] : null)
+
+      // If this driver is already active on a caddy (e.g. page refresh during shift), resume it directly.
+      // Otherwise, open the vehicle picker so the driver can choose any available caddy.
+      const activeCaddyForThisDriver = caddiesToOffer.find(
+        (c: Caddy) => c.current_driver_id === profile.id && c.status !== 'OFF_DUTY'
+      )
+      setAssignedCaddy(activeCaddyForThisDriver || null)
     } catch (err: any) {
       setAuthError(`Connection error: ${err.message || err}`)
     } finally {

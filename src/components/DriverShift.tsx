@@ -4,7 +4,7 @@ import React, { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { 
   Play, Square, AlertTriangle, LogOut, Compass, MapPin, 
-  Wifi, WifiOff, Users, BatteryCharging, Radio, Volume2, ShieldAlert
+  Wifi, WifiOff, Users, BatteryCharging, Radio, Volume2, ShieldAlert, Lock
 } from 'lucide-react'
 import { Capacitor } from '@capacitor/core'
 import { Geolocation, type CallbackID, type Position } from '@capacitor/geolocation'
@@ -28,6 +28,7 @@ interface Caddy {
   name: string
   route_id: string | null
   current_driver_id: string | null
+  driver_name?: string | null
   status: 'OFF_DUTY' | 'ON_DUTY' | 'ON_BREAK' | 'IN_MAINTENANCE'
   current_lat: number | null
   current_lng: number | null
@@ -534,18 +535,23 @@ export default function DriverShift({
   }
 
   const handleSelectCaddy = async (selected: Caddy) => {
-    // Always reset caddy to OFF_DUTY when a new driver claims it.
-    // This prevents inheriting a stale ON_DUTY/ON_BREAK status from
-    // a previous driver's session, which would skip the "Start Duty" step.
-    const freshState = {
-      current_driver_id: profile.id,
-      status: 'OFF_DUTY' as const,
-      speed: 0,
-      heading: 0,
-      current_lat: null,
-      current_lng: null,
-      last_ping: new Date().toISOString()
-    }
+    // If resuming own duty session, preserve status
+    const isResumingOwnDuty = selected.current_driver_id === profile.id && selected.status !== 'OFF_DUTY'
+
+    const freshState = isResumingOwnDuty
+      ? {
+          current_driver_id: profile.id,
+          last_ping: new Date().toISOString()
+        }
+      : {
+          current_driver_id: profile.id,
+          status: 'OFF_DUTY' as const,
+          speed: 0,
+          heading: 0,
+          current_lat: null,
+          current_lng: null,
+          last_ping: new Date().toISOString()
+        }
     try {
       const { data: updated } = await supabase
         .from('caddies')
@@ -582,26 +588,61 @@ export default function DriverShift({
         </div>
 
         <div className="w-full max-w-sm space-y-3">
-          {listToDisplay.map((caddyItem) => (
-            <div 
-              key={caddyItem.id}
-              onClick={() => handleSelectCaddy(caddyItem)}
-              className="bg-slate-900 border border-slate-800 hover:border-teal-500/50 p-4 rounded-2xl flex items-center justify-between cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98] group"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400 group-hover:bg-teal-500 group-hover:text-slate-950 transition-colors">
-                  <Play className="w-5 h-5 fill-current" />
+          {listToDisplay.map((caddyItem) => {
+            const isCurrentDriverOnCaddy = caddyItem.current_driver_id === profile.id
+            const isOccupiedByOther = 
+              (caddyItem.status === 'ON_DUTY' || caddyItem.status === 'ON_BREAK') && 
+              caddyItem.current_driver_id !== profile.id
+
+            return (
+              <div 
+                key={caddyItem.id}
+                onClick={() => {
+                  if (!isOccupiedByOther) {
+                    handleSelectCaddy(caddyItem)
+                  }
+                }}
+                className={`p-4 rounded-2xl flex items-center justify-between transition-all ${
+                  isOccupiedByOther
+                    ? 'bg-slate-900/50 border border-slate-800/80 opacity-60 cursor-not-allowed'
+                    : 'bg-slate-900 border border-slate-800 hover:border-teal-500/50 cursor-pointer hover:scale-[1.02] active:scale-[0.98] group'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+                    isOccupiedByOther
+                      ? 'bg-amber-500/10 border border-amber-500/20 text-amber-400'
+                      : 'bg-teal-500/10 border border-teal-500/20 text-teal-400 group-hover:bg-teal-500 group-hover:text-slate-950'
+                  }`}>
+                    {isOccupiedByOther ? <Lock className="w-5 h-5" /> : <Play className="w-5 h-5 fill-current" />}
+                  </div>
+                  <div className="text-left">
+                    <div className="font-bold text-sm text-white flex items-center gap-1.5">
+                      {caddyItem.name}
+                      {isCurrentDriverOnCaddy && (
+                        <span className="text-[10px] bg-teal-500/20 text-teal-300 px-1.5 py-0.5 rounded font-medium">Your Caddy</span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-slate-400 font-mono">
+                      {isOccupiedByOther 
+                        ? `Driven by: ${caddyItem.driver_name || 'Another Driver'}` 
+                        : 'Ready for shift'}
+                    </div>
+                  </div>
                 </div>
-                <div className="text-left">
-                  <div className="font-bold text-sm text-white">{caddyItem.name}</div>
-                  <div className="text-[10px] text-slate-500 font-mono">ID: {caddyItem.id}</div>
-                </div>
+
+                {isOccupiedByOther ? (
+                  <span className="text-xs font-semibold text-amber-400 bg-amber-500/10 px-3 py-1 rounded-lg border border-amber-500/20 flex items-center gap-1">
+                    On Duty
+                  </span>
+                ) : (
+                  <span className="text-xs font-semibold text-teal-400 bg-teal-500/10 px-3 py-1 rounded-lg border border-teal-500/20 group-hover:bg-teal-500 group-hover:text-slate-950 transition-colors">
+                    {isCurrentDriverOnCaddy && caddyItem.status !== 'OFF_DUTY' ? 'Resume Shift' : 'Select & Drive'}
+                  </span>
+                )}
               </div>
-              <span className="text-xs font-semibold text-teal-400 bg-teal-500/10 px-3 py-1 rounded-lg border border-teal-500/20">
-                Select & Drive
-              </span>
-            </div>
-          ))}
+            )
+          })}
         </div>
 
         <div className="flex gap-3">
