@@ -534,23 +534,32 @@ export default function DriverShift({
   }
 
   const handleSelectCaddy = async (selected: Caddy) => {
+    // Always reset caddy to OFF_DUTY when a new driver claims it.
+    // This prevents inheriting a stale ON_DUTY/ON_BREAK status from
+    // a previous driver's session, which would skip the "Start Duty" step.
+    const freshState = {
+      current_driver_id: profile.id,
+      status: 'OFF_DUTY' as const,
+      speed: 0,
+      heading: 0,
+      current_lat: null,
+      current_lng: null,
+      last_ping: new Date().toISOString()
+    }
     try {
       const { data: updated } = await supabase
         .from('caddies')
-        .update({
-          current_driver_id: profile.id,
-          last_ping: new Date().toISOString()
-        })
+        .update(freshState)
         .eq('id', selected.id)
         .select()
         .maybeSingle()
 
-      const target = updated || { ...selected, current_driver_id: profile.id }
+      const target = updated || { ...selected, ...freshState }
       setCaddyState(target)
       onCaddyStatusChange(target)
       setShowVehiclePicker(false)
     } catch (e) {
-      const target = { ...selected, current_driver_id: profile.id }
+      const target = { ...selected, ...freshState }
       setCaddyState(target)
       onCaddyStatusChange(target)
       setShowVehiclePicker(false)
