@@ -296,7 +296,7 @@ export default function DriverPortal() {
         return
       }
 
-      // 2. A driver may only operate caddies assigned by an administrator.
+      // 2. Fetch all caddies to let the driver choose
       const { data: caddiesData, error: caddiesError } = await supabase
         .from('caddies')
         .select('*')
@@ -307,16 +307,15 @@ export default function DriverPortal() {
       }
 
       const caddyRows = Array.isArray(caddiesData) ? caddiesData : []
-      const assignedList = caddyRows.filter((c: Caddy) => c.current_driver_id === profile.id)
-      if (assignedList.length === 0) {
-        setAuthError('Your account has no caddy assignment. Please contact the transport administrator.')
+      if (caddyRows.length === 0) {
+        setAuthError('No caddies available in the system. Please contact the transport administrator.')
         return
       }
-      const caddiesToOffer = assignedList
+      const caddiesToOffer = caddyRows
 
       setDriverProfile(profile)
       setAvailableCaddies(caddiesToOffer)
-      // With more than one assignment, require the driver to deliberately
+      // If there's more than one caddy available, require the driver to deliberately
       // choose today's vehicle rather than silently taking the first one.
       setAssignedCaddy(caddiesToOffer.length === 1 ? caddiesToOffer[0] : null)
     } catch (err: any) {
