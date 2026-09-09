@@ -518,10 +518,20 @@ export default function AdminPortal({ onLogout }: { onLogout?: () => void }) {
   const handleForceEndShift = async (caddyId: string) => {
     if (!confirm(`Emergency Override: Force end shift for caddy ${caddyId}?`)) return
 
+    // 1. Revoke all active telemetry sessions FIRST to stop background pings
+    try {
+      await supabase.rpc('revoke_telemetry_session_by_caddy', { p_caddy_id: caddyId })
+    } catch (err) {
+      console.error('Failed to revoke telemetry sessions:', err)
+    }
+
+    // 2. Set OFF_DUTY and clear coordinates to remove map marker immediately
     const { error } = await supabase
       .from('caddies')
       .update({
         status: 'OFF_DUTY',
+        current_lat: null,
+        current_lng: null,
         speed: 0,
         heading: 0,
         last_ping: new Date().toISOString()

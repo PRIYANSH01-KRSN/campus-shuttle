@@ -312,6 +312,11 @@ export default function DriverShift({
       if (!token) throw new Error('No token returned')
       sessionToken = token
       telemetrySessionTokenRef.current = sessionToken
+      // Persist token to localStorage as backup for End Duty revocation
+      // (React refs are lost on page reload / app restart)
+      if (typeof window !== 'undefined' && activeCaddy.id) {
+        localStorage.setItem(`telemetry-token:${activeCaddy.id}`, sessionToken)
+      }
     } catch (err: any) {
       streamingRef.current = false
       saveDutyIntent(false)
@@ -498,19 +503,38 @@ export default function DriverShift({
 
   const handleEndDuty = async () => {
     if (!caddyState) return
-    
-    // Revoke the active telemetry session token securely from the database
+
+    // 1. Stop GPS streaming & background service FIRST to prevent new pings
+    await stopStreaming()
+    saveDutyIntent(false)
+
+    // 2. Revoke the active telemetry session — try all available methods
+    //    to guarantee the native background HTTP webhook is invalidated.
+    // 2a. Try by raw token from React ref (fast path)
     if (telemetrySessionTokenRef.current) {
       try {
         await supabase.rpc('revoke_telemetry_session', { p_raw_token: telemetrySessionTokenRef.current })
       } catch (err) {
-        console.error('Failed to revoke telemetry session:', err)
+        console.error('Failed to revoke telemetry session by token:', err)
       }
       telemetrySessionTokenRef.current = null
     }
-
-    await stopStreaming()
-    saveDutyIntent(false)
+    // 2b. Try localStorage backup token (survives page reload / app restart)
+    if (typeof window !== 'undefined') {
+      const backupToken = localStorage.getItem(`telemetry-token:${caddyState.id}`)
+      if (backupToken) {
+        try {
+          await supabase.rpc('revoke_telemetry_session', { p_raw_token: backupToken })
+        } catch (err) { /* already revoked or expired */ }
+        localStorage.removeItem(`telemetry-token:${caddyState.id}`)
+      }
+    }
+    // 2c. Failsafe: revoke ALL active sessions for this caddy
+    try {
+      await supabase.rpc('revoke_telemetry_session_by_caddy', { p_caddy_id: caddyState.id })
+    } catch (err) {
+      console.error('Failsafe session revocation failed:', err)
+    }
 
     // End the shift but retain the admin-managed driver and route assignment.
     const { data: updatedCaddy, error } = await supabase

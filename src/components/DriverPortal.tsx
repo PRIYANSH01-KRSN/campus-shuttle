@@ -345,6 +345,19 @@ export default function DriverPortal() {
         .update({ status: 'OFF_DUTY', speed: 0, heading: 0, current_lat: null, current_lng: null })
         .eq('id', assignedCaddy.id)
     }
+    // Revoke all active telemetry sessions for this caddy to stop
+    // the native background service from resurrecting the duty.
+    if (assignedCaddy) {
+      try {
+        await supabase.rpc('revoke_telemetry_session_by_caddy', { p_caddy_id: assignedCaddy.id })
+      } catch (err) {
+        console.error('Failed to revoke telemetry session on logout:', err)
+      }
+      // Clear any persisted backup token
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(`telemetry-token:${assignedCaddy.id}`)
+      }
+    }
     // This is one of the two explicit ways to end the durable duty session
     // (the other is the End Duty control in DriverShift). No poll, reconnect,
     // or realtime event is allowed to clear this cache.
