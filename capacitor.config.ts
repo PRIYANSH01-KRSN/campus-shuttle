@@ -5,8 +5,6 @@ const config: CapacitorConfig = {
   appName: 'SNU Caddy Driver',
   webDir: 'out',
   server: {
-    url: 'https://snu-caddy.vercel.app',
-    cleartext: true,
     androidScheme: 'https'
   }
 };
