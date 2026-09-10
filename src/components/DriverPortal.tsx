@@ -87,11 +87,68 @@ export default function DriverPortal() {
     // Check initial buffer count
     checkBufferCount()
 
+    // Restore durable session from localStorage on fresh app launch
+    const storedProfileStr = localStorage.getItem('snu-driver-profile')
+    const storedCaddyId = localStorage.getItem('snu-driver-caddy-id')
+
+    if (storedProfileStr) {
+      try {
+        const storedProfile = JSON.parse(storedProfileStr)
+        restoreSession(storedProfile, storedCaddyId)
+      } catch (err) {
+        localStorage.removeItem('snu-driver-profile')
+        localStorage.removeItem('snu-driver-caddy-id')
+      }
+    }
+
     return () => {
       window.removeEventListener('online', updateOnlineStatus)
       window.removeEventListener('offline', updateOnlineStatus)
     }
   }, [])
+
+  // Auto-resume duty session when OS restores the WebView
+  const restoreSession = async (profile: Profile, caddyId: string | null) => {
+    setLoading(true)
+    try {
+      // Always fetch fresh fleet state to offer picker
+      const [{ data: caddiesData }, { data: driversData }] = await Promise.all([
+        supabase.from('caddies').select('*').order('name', { ascending: true }),
+        supabase.from('profiles').select('id, full_name').eq('role', 'driver')
+      ])
+      
+      const driverMap = new Map((driversData || []).map((d: any) => [d.id, d.full_name]))
+      const caddiesToOffer: Caddy[] = (caddiesData || []).map((c: any) => ({
+        ...c,
+        driver_name: c.current_driver_id ? (driverMap.get(c.current_driver_id) || null) : null
+      }))
+      
+      setAvailableCaddies(caddiesToOffer)
+      setDriverProfile(profile)
+
+      if (caddyId) {
+        const activeCaddy = caddiesToOffer.find(c => c.id === caddyId && c.current_driver_id === profile.id && c.status !== 'OFF_DUTY')
+        if (activeCaddy) {
+          setAssignedCaddy(activeCaddy)
+        } else {
+          localStorage.removeItem('snu-driver-caddy-id')
+        }
+      }
+    } catch (err) {
+      console.error('Failed to restore session:', err)
+      localStorage.removeItem('snu-driver-profile')
+      localStorage.removeItem('snu-driver-caddy-id')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Keep localStorage caddy sync updated when selecting vehicles in DriverShift
+  useEffect(() => {
+    if (typeof window !== 'undefined' && assignedCaddy) {
+      localStorage.setItem('snu-driver-caddy-id', assignedCaddy.id)
+    }
+  }, [assignedCaddy])
 
   // Synthesize double beep sound chime for pickup alarms
   const playPickupChime = () => {
@@ -322,6 +379,10 @@ export default function DriverPortal() {
 
       setDriverProfile(profile)
       setAvailableCaddies(caddiesToOffer)
+      
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('snu-driver-profile', JSON.stringify(profile))
+      }
 
       // If this driver is already active on a caddy (e.g. page refresh during shift), resume it directly.
       // Otherwise, open the vehicle picker so the driver can choose any available caddy.
@@ -363,6 +424,8 @@ export default function DriverPortal() {
     // or realtime event is allowed to clear this cache.
     if (driverProfile && typeof window !== 'undefined') {
       sessionStorage.removeItem(`caddy-duty:${driverProfile.id}`)
+      localStorage.removeItem('snu-driver-profile')
+      localStorage.removeItem('snu-driver-caddy-id')
     }
     setDriverProfile(null)
     setAssignedCaddy(null)
