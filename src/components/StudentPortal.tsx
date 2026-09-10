@@ -250,11 +250,20 @@ export default function StudentPortal() {
 
   useEffect(() => {
     fetchBaseData()
-    // Realtime is primary; visible-page polling is a reliable fallback when a
-    // mobile browser reconnects its WebSocket in the background.
+    
+    // Polling fallback
     const pollInterval = setInterval(() => {
       if (document.visibilityState === 'visible') fetchBaseData()
     }, Math.min(POLLING_INTERVAL_MS, 2500))
+
+    // Fetch immediately when user brings the tab back to the foreground
+    // (Bypasses iOS/Android background interval throttling)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchBaseData()
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange)
 
     const savedCooldown = localStorage.getItem('wait_flag_cooldown')
     if (savedCooldown) {
@@ -263,13 +272,17 @@ export default function StudentPortal() {
       setCooldownRemaining(remaining)
     }
 
-    return () => clearInterval(pollInterval)
+    return () => {
+      clearInterval(pollInterval)
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+    }
   }, [])
 
-  const handleRefreshLiveLocation = () => {
-    if (typeof window !== 'undefined') {
-      window.location.reload()
-    }
+  // Soft refresh data without reloading the whole page
+  const handleRefreshLiveLocation = async () => {
+    setIsRefreshing(true)
+    await fetchBaseData()
+    setTimeout(() => setIsRefreshing(false), 800) // Small delay so the user sees the spin animation
   }
 
   useEffect(() => {
