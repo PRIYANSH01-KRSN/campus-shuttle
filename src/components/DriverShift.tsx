@@ -226,12 +226,13 @@ export default function DriverShift({
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
   }, [])
 
-  // Clean up watchers on unmount
+  // Auto-resume streaming if the OS reloaded the WebView while ON_DUTY
   useEffect(() => {
-    return () => {
-      stopStreaming()
+    if (caddyState?.status === 'ON_DUTY' && !streamingRef.current) {
+      addLog('[AUTO_RESUME] Restarting tracking after app reload')
+      void startStreaming()
     }
-  }, [])
+  }, [caddyState?.status])
 
   // Geofence Validation: Check coordinates within SNU campus bounds
   const validateGeofence = (lat: number, lng: number) => {
@@ -597,11 +598,13 @@ export default function DriverShift({
       console.error('Failsafe session revocation failed:', err)
     }
 
-    // End the shift but retain the admin-managed driver and route assignment.
+    // End the shift and release the caddy back to the pool.
     const { data: updatedCaddy, error } = await supabase
       .from('caddies')
       .update({
         status: 'OFF_DUTY',
+        current_driver_id: null,
+        route_id: null,
         current_lat: null,
         current_lng: null,
         speed: 0,
