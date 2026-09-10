@@ -186,10 +186,39 @@ export default function DriverShift({
 
   // Resume through a ref so the window listener always invokes the latest
   // tracker with the current caddy, not a stale render closure.
+  // Fire an immediate heartbeat ping when the tab or app refocuses so the
+  // server timestamp never drifts stale while the driver had the screen off.
+  const pushHeartbeat = async () => {
+    const ac = activeCaddyRef.current
+    if (!ac || !streamingRef.current) return
+    const loc = lastLocationRef.current
+    if (loc.lat === 0 && loc.lng === 0) return
+    const now = new Date().toISOString()
+    addLog(`[HEARTBEAT] Pushing keep-alive ping`)
+    lastTelemetryPushTimeRef.current = Date.now()
+    const { error } = await supabase
+      .from('caddies')
+      .update({
+        current_lat: loc.lat,
+        current_lng: loc.lng,
+        speed: loc.speed,
+        heading: loc.heading,
+        last_ping: now
+      })
+      .eq('id', ac.id)
+      .eq('status', 'ON_DUTY')
+    if (error) addLog(`[HEARTBEAT_ERR] ${error.code}`)
+  }
+
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && dutyIntentRef.current && !streamingRef.current) {
-        void startStreamingRef.current()
+      if (document.visibilityState === 'visible' && dutyIntentRef.current) {
+        // Immediate heartbeat so last_ping is fresh right away
+        void pushHeartbeat()
+        // Resume GPS streaming if it was lost
+        if (!streamingRef.current) {
+          void startStreamingRef.current()
+        }
       }
     }
     document.addEventListener("visibilitychange", handleVisibilityChange)
@@ -255,12 +284,34 @@ export default function DriverShift({
       last_ping: new Date().toISOString()
     }
 
-    // Push telemetry is now handled natively by Capgo HTTP webhooks in the background.
-    // This JS callback only updates local state and frontend diagnostic logs.
-    addLog(`[JS_TELEMETRY] Delegated to native HTTP layer (Token Active)`)
-    
-    // Optionally buffer offline logs if desired, but native HTTP doesn't use it.
-    if (!navigator.onLine) {
+    // Push telemetry directly to Supabase. On native platforms, the Capgo
+    // background service delivers in parallel. On web browsers, this JS path
+    // is the ONLY delivery mechanism.
+    if (navigator.onLine) {
+      addLog(`[DB_UPDATE_START] Ping: ${ping.last_ping}`)
+      const reqStart = Date.now()
+      const { error: pushError } = await supabase
+        .from('caddies')
+        .update({
+          current_lat: ping.lat,
+          current_lng: ping.lng,
+          speed: ping.speed,
+          heading: ping.heading,
+          last_ping: ping.last_ping
+        })
+        .eq('id', activeCaddyRef.current.id)
+        .eq('status', 'ON_DUTY')
+
+      const duration = Date.now() - reqStart
+      if (pushError) {
+        addLog(`[DB_UPDATE_FAIL] ${duration}ms Err: ${pushError.code}`)
+        console.error('Supabase telemetry push error:', pushError)
+        onTelemetryLogged(ping)
+      } else {
+        addLog(`[DB_UPDATE_SUCCESS] ${duration}ms`)
+      }
+    } else {
+      addLog(`[DB_UPDATE_FAIL] Offline`)
       onTelemetryLogged(ping)
     }
   }
@@ -383,8 +434,8 @@ export default function DriverShift({
           backgroundTitle: "SNU Caddy Tracker",
           requestPermissions: true,
           stale: false,
-          distanceFilter: 10,
-          minIntervalMs: 10000,
+          distanceFilter: 5,
+          minIntervalMs: 5000,
           url: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/rpc/update_caddy_telemetry`,
           headers: {
             'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -423,18 +474,25 @@ export default function DriverShift({
         }
 
         watchIdRef.current = startWatch()
-
-        // Network/GPS jitter only changes the local quality indicator. The
-        // active duty session remains ON_DUTY through a full 45-second grace
-        // window (and is never auto-written as OFF_DUTY).
-        heartbeatIntervalRef.current = setInterval(() => {
-          const timeSinceLastGps = Date.now() - lastGpsTimeRef.current
-          if (timeSinceLastGps > OFF_DUTY_GRACE_WINDOW_MS) {
-            setGpsQuality('SEARCHING')
-          }
-        }, 5000)
       }
     }
+
+    // ── Stationary heartbeat: keep last_ping fresh even when caddy is parked ──
+    // GPS watchPosition (browser & native) only fires on movement. If the
+    // driver is stationary at a gate or station waiting for passengers for
+    // longer than STALE_MARKER_THRESHOLD_MS (5 min), students see "Signal
+    // Lost". This 10-second heartbeat prevents that.
+    heartbeatIntervalRef.current = setInterval(async () => {
+      const timeSinceLastGps = Date.now() - lastGpsTimeRef.current
+      if (timeSinceLastGps > OFF_DUTY_GRACE_WINDOW_MS) {
+        setGpsQuality('SEARCHING')
+      }
+      // Push a heartbeat if no telemetry push happened in the last 8 seconds
+      const timeSinceLastPush = Date.now() - lastTelemetryPushTimeRef.current
+      if (timeSinceLastPush > 8000 && streamingRef.current && activeCaddyRef.current) {
+        await pushHeartbeat()
+      }
+    }, 10000)
   }
 
   startStreamingRef.current = startStreaming
