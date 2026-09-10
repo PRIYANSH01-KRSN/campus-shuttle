@@ -10,7 +10,7 @@ import { Capacitor } from '@capacitor/core'
 import { Geolocation, type CallbackID, type Position } from '@capacitor/geolocation'
 import { BackgroundGeolocation } from '@capgo/background-geolocation'
 import dynamic from 'next/dynamic'
-import { ROUTES, ROUTE_PATHS } from '@/utils/campusData'
+import { ROUTES, ROUTE_PATHS, CAMPUS_BOUNDS } from '@/utils/campusData'
 
 const DriverMap = dynamic(() => import('./AdminMap'), { ssr: false })
 const OFF_DUTY_GRACE_WINDOW_MS = 45_000
@@ -79,6 +79,7 @@ export default function DriverShift({
   const [currentSpeed, setCurrentSpeed] = useState<number>(0)
   const [isGeofenced, setIsGeofenced] = useState<boolean>(true)
   const [gpsQuality, setGpsQuality] = useState<'EXCELLENT' | 'WEAK' | 'SEARCHING'>('SEARCHING')
+  const [isStreaming, setIsStreaming] = useState(false)
 
   // Refs for tracking
   const watchIdRef = useRef<string | number | null>(null)
@@ -144,10 +145,16 @@ export default function DriverShift({
   // GPS speed is often null or noisy on phones. Derive it from consecutive
   // accepted locations, ignore accuracy-sized movement, then low-pass filter.
   const acceptLocation = (lat: number, lng: number, heading: number, reportedSpeed: number | null, accuracy: number, timestamp = Date.now()) => {
-    if (!validateGeofence(lat, lng) || accuracy > 500) {
-      setIsGeofenced(false)
+    const inBounds = validateGeofence(lat, lng)
+    setIsGeofenced(inBounds)
+    if (!inBounds) {
+      addLog(`[GEOFENCE_WARN] Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)} outside campus`)
+    }
+    if (accuracy > 500) {
+      addLog(`[ACCURACY_REJECT] Accuracy ${Math.round(accuracy)}m > 500m`)
       return
     }
+
     const previous = lastAcceptedLocationRef.current
     let measuredSpeed = reportedSpeed !== null && reportedSpeed >= 0 ? reportedSpeed * 3.6 : 0
     if (previous) {
@@ -155,14 +162,16 @@ export default function DriverShift({
       const distance = distanceMeters(previous, { lat, lng })
       // Do not convert GPS jitter smaller than its stated accuracy into speed.
       measuredSpeed = distance <= Math.max(5, accuracy * 0.65) ? 0 : (distance / seconds) * 3.6
+      // Clamp excessive speed spike rather than dropping coordinates
+      if (measuredSpeed > 40) {
+        measuredSpeed = Math.min(measuredSpeed, 40)
+      }
     }
-    if (measuredSpeed > 40) return
 
     const speedKmh = Math.round(smoothedSpeedRef.current * 0.65 + measuredSpeed * 0.35)
     smoothedSpeedRef.current = speedKmh
     lastAcceptedLocationRef.current = { lat, lng, timestamp }
     lastLocationRef.current = { lat, lng, heading, speed: speedKmh }
-    setIsGeofenced(true)
     setCurrentSpeed(speedKmh)
     setGpsQuality(accuracy < 15 ? 'EXCELLENT' : 'WEAK')
     setCaddyState(previousState => previousState ? { ...previousState, current_lat: lat, current_lng: lng, heading, speed: speedKmh, last_ping: new Date(timestamp).toISOString() } : previousState)
@@ -190,7 +199,12 @@ export default function DriverShift({
   // server timestamp never drifts stale while the driver had the screen off.
   const pushHeartbeat = async () => {
     const ac = activeCaddyRef.current
-    if (!ac || !streamingRef.current) return
+    if (!ac) return
+    if (!streamingRef.current && ac.status === 'ON_DUTY') {
+      void startStreamingRef.current()
+      return
+    }
+    if (!streamingRef.current) return
     const loc = lastLocationRef.current
     if (loc.lat === 0 && loc.lng === 0) return
     const now = new Date().toISOString()
@@ -212,27 +226,29 @@ export default function DriverShift({
 
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && dutyIntentRef.current) {
-        // Immediate heartbeat so last_ping is fresh right away
-        void pushHeartbeat()
-        // Resume GPS streaming if it was lost
-        if (!streamingRef.current) {
-          void startStreamingRef.current()
+      if (document.visibilityState === 'visible') {
+        if (caddyState?.status === 'ON_DUTY' || dutyIntentRef.current) {
+          void pushHeartbeat()
+          if (!streamingRef.current) {
+            void startStreamingRef.current()
+          }
         }
       }
     }
     document.addEventListener("visibilitychange", handleVisibilityChange)
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
-  }, [])
+  }, [caddyState?.status])
 
-  // A duty-state transition is the source of truth for the tracker lifecycle.
-  // This recovers tracking immediately if a render lands between the durable
-  // ON_DUTY mutation and listener registration.
+  // Auto-recover tracking whenever vehicle is in ON_DUTY status
   useEffect(() => {
-    if (caddyState?.status === 'ON_DUTY' && dutyIntentRef.current && !streamingRef.current) {
+    if (caddyState?.status === 'ON_DUTY' && !streamingRef.current) {
+      dutyIntentRef.current = true
+      if (typeof window !== 'undefined' && caddyState.id) {
+        sessionStorage.setItem(dutySessionKey, caddyState.id)
+      }
       void startStreamingRef.current()
     }
-  }, [caddyState?.status])
+  }, [caddyState?.status, caddyState?.id])
 
   // Clean up watchers on unmount
   useEffect(() => {
@@ -241,13 +257,9 @@ export default function DriverShift({
     }
   }, [])
 
-  // Geofence Validation: Discard coordinates outside SNU campus bounds
-  // Campus boundaries: [[28.5150, 77.5650], [28.5350, 77.5850]]
+  // Geofence Validation: Check coordinates within SNU campus bounds
   const validateGeofence = (lat: number, lng: number) => {
-    const minLat = 28.5150
-    const maxLat = 28.5350
-    const minLng = 77.5650
-    const maxLng = 77.5850
+    const [[minLat, minLng], [maxLat, maxLng]] = CAMPUS_BOUNDS
     return lat >= minLat && lat <= maxLat && lng >= minLng && lng <= maxLng
   }
 
@@ -273,11 +285,13 @@ export default function DriverShift({
     }
 
     lastTelemetryPushTimeRef.current = now
-    if (lastLocationRef.current.lat === 0 && lastLocationRef.current.lng === 0) return
+    const targetLat = lastLocationRef.current.lat !== 0 ? lastLocationRef.current.lat : lat
+    const targetLng = lastLocationRef.current.lng !== 0 ? lastLocationRef.current.lng : lng
+    if (targetLat === 0 && targetLng === 0) return
 
     const ping = {
-      lat: lastLocationRef.current.lat,
-      lng: lastLocationRef.current.lng,
+      lat: targetLat,
+      lng: targetLng,
       speed: lastLocationRef.current.speed,
       heading: lastLocationRef.current.heading,
       status: 'ON_DUTY',
@@ -349,6 +363,7 @@ export default function DriverShift({
     const activeCaddy = activeCaddyRef.current
     if (!activeCaddy || streamingRef.current) return
     streamingRef.current = true
+    setIsStreaming(true)
     saveDutyIntent(true, activeCaddy.id)
 
     // 1. Authenticate and create secure telemetry session token
@@ -370,9 +385,10 @@ export default function DriverShift({
       }
     } catch (err: any) {
       streamingRef.current = false
+      setIsStreaming(false)
       saveDutyIntent(false)
       console.error('Failed to create telemetry session:', err)
-      alert(`Start Duty Failed: ${err.message || JSON.stringify(err)}`)
+      addLog(`[SESSION_ERR] ${err.message || JSON.stringify(err)}`)
       return
     }
 
@@ -388,6 +404,7 @@ export default function DriverShift({
 
     if (error) {
       streamingRef.current = false
+      setIsStreaming(false)
       saveDutyIntent(false)
       console.error('Failed to start duty:', error)
       return
@@ -414,10 +431,11 @@ export default function DriverShift({
           await BackgroundGeolocation.requestPermissions({ permissions: ['backgroundLocation', 'notification'] })
         }
         const nativeWatchId: CallbackID = await Geolocation.watchPosition(
-          { enableHighAccuracy: true, timeout: 5000, maximumAge: 0, interval: 2500, minimumUpdateInterval: 1000 },
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 3000, interval: 2500, minimumUpdateInterval: 1000 },
           (position, nativeError) => {
             if (nativeError || !position) {
               console.error('Native GPS tracking error:', nativeError)
+              addLog(`[GPS_NATIVE_ERR] ${nativeError?.message || 'No fix'}`)
               setGpsQuality('SEARCHING')
               return
             }
@@ -455,6 +473,20 @@ export default function DriverShift({
             const heading = loc.bearing ?? loc.heading ?? 0
             const accuracy = loc.accuracy ?? 10
             acceptLocation(lat, lng, heading, loc.speed ?? null, accuracy, loc.time ? new Date(loc.time).getTime() : Date.now())
+            // Also trigger JS handleGpsUpdate for dual direct delivery
+            lastGpsTimeRef.current = Date.now()
+            void handleGpsUpdate({
+              coords: {
+                latitude: lat,
+                longitude: lng,
+                accuracy,
+                heading,
+                speed: loc.speed ?? 0,
+                altitude: loc.altitude ?? null,
+                altitudeAccuracy: null
+              },
+              timestamp: loc.time ? new Date(loc.time).getTime() : Date.now()
+            } as any)
           }
         })
       } catch (err) {
@@ -469,7 +501,7 @@ export default function DriverShift({
               handleGpsUpdate(pos)
             },
             handleGpsError,
-            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 3000 }
           )
         }
 
@@ -499,6 +531,7 @@ export default function DriverShift({
 
   const stopStreaming = async () => {
     streamingRef.current = false
+    setIsStreaming(false)
     // 1. Clear intervals & watchers
     if (heartbeatIntervalRef.current) {
       clearInterval(heartbeatIntervalRef.current)
@@ -774,6 +807,23 @@ export default function DriverShift({
 
         {/* System parameters indicator badges */}
         <div className="flex items-center gap-2">
+          {/* Tracking Live indicator */}
+          {isDutyRunning && (
+            <button
+              onClick={() => {
+                if (!isStreaming) void startStreaming()
+              }}
+              className={`text-[10px] px-2.5 py-1 rounded-full font-bold flex items-center gap-1.5 transition-all ${
+                isStreaming
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse cursor-pointer'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${isStreaming ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'}`} />
+              {isStreaming ? 'GPS LIVE' : 'RESUME GPS'}
+            </button>
+          )}
+
           {/* Offline/Online signal Status */}
           {isOnline ? (
             <span className="flex items-center gap-1 text-[10px] bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded text-emerald-400 font-bold">
@@ -901,14 +951,24 @@ export default function DriverShift({
       <footer className="bg-slate-900 border-t border-slate-850 p-6 space-y-4 shrink-0 z-45">
         
         <div className="grid grid-cols-2 gap-4">
-          {/* Start Duty (Green) */}
+          {/* Start Duty / Resume Tracking (Green) */}
           <button
-            onClick={handleStartDuty}
-            disabled={isDutyRunning}
-            className="py-5 bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 hover:bg-emerald-600 text-slate-950 font-black rounded-3xl shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-2 transition-all active:scale-95 text-sm uppercase tracking-wider border border-emerald-400/20"
+            onClick={async () => {
+              if (!isDutyRunning) {
+                await handleStartDuty()
+              } else if (!isStreaming) {
+                await startStreaming()
+              }
+            }}
+            disabled={isDutyRunning && isStreaming}
+            className={`py-5 ${
+              isDutyRunning && isStreaming 
+                ? 'bg-slate-800 text-emerald-400 border-emerald-500/30 cursor-default' 
+                : 'bg-emerald-500 hover:bg-emerald-600 text-slate-950 animate-pulse'
+            } font-black rounded-3xl shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95 text-sm uppercase tracking-wider border`}
           >
-            <Play className="w-5 h-5 fill-slate-950" />
-            Start Duty
+            <Play className={`w-5 h-5 ${isDutyRunning && isStreaming ? 'fill-emerald-400' : 'fill-slate-950'}`} />
+            {isDutyRunning ? (isStreaming ? 'Live Tracking' : 'Resume Tracking') : 'Start Duty'}
           </button>
 
           {/* Take Break (Yellow) */}
