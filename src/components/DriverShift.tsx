@@ -79,7 +79,6 @@ export default function DriverShift({
   const [currentSpeed, setCurrentSpeed] = useState<number>(0)
   const [isGeofenced, setIsGeofenced] = useState<boolean>(true)
   const [gpsQuality, setGpsQuality] = useState<'EXCELLENT' | 'WEAK' | 'SEARCHING'>('SEARCHING')
-  const [isStreaming, setIsStreaming] = useState(false)
 
   // Refs for tracking
   const watchIdRef = useRef<string | number | null>(null)
@@ -110,7 +109,6 @@ export default function DriverShift({
   const activeCaddyRef = useRef<Caddy | null>(caddy)
   const dutyIntentRef = useRef(false)
   const streamingRef = useRef(false)
-  const startStreamingRef = useRef<() => Promise<void>>(async () => undefined)
   const telemetrySessionTokenRef = useRef<string | null>(null)
 
   const dutySessionKey = `caddy-duty:${profile.id}`
@@ -193,18 +191,11 @@ export default function DriverShift({
     })
   }, [caddy])
 
-  // Resume through a ref so the window listener always invokes the latest
-  // tracker with the current caddy, not a stale render closure.
-  // Fire an immediate heartbeat ping when the tab or app refocuses so the
-  // server timestamp never drifts stale while the driver had the screen off.
+  // Stationary heartbeat — pushes last_ping while parked so students see Live not Signal Lost
   const pushHeartbeat = async () => {
+    if (!streamingRef.current) return
     const ac = activeCaddyRef.current
     if (!ac) return
-    if (!streamingRef.current && ac.status === 'ON_DUTY') {
-      void startStreamingRef.current()
-      return
-    }
-    if (!streamingRef.current) return
     const loc = lastLocationRef.current
     if (loc.lat === 0 && loc.lng === 0) return
     const now = new Date().toISOString()
@@ -224,31 +215,16 @@ export default function DriverShift({
     if (error) addLog(`[HEARTBEAT_ERR] ${error.code}`)
   }
 
+  // When driver brings app back to foreground, push a fresh ping immediately
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        if (caddyState?.status === 'ON_DUTY' || dutyIntentRef.current) {
-          void pushHeartbeat()
-          if (!streamingRef.current) {
-            void startStreamingRef.current()
-          }
-        }
+      if (document.visibilityState === 'visible' && streamingRef.current) {
+        void pushHeartbeat()
       }
     }
     document.addEventListener("visibilitychange", handleVisibilityChange)
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
-  }, [caddyState?.status])
-
-  // Auto-recover tracking whenever vehicle is in ON_DUTY status
-  useEffect(() => {
-    if (caddyState?.status === 'ON_DUTY' && !streamingRef.current) {
-      dutyIntentRef.current = true
-      if (typeof window !== 'undefined' && caddyState.id) {
-        sessionStorage.setItem(dutySessionKey, caddyState.id)
-      }
-      void startStreamingRef.current()
-    }
-  }, [caddyState?.status, caddyState?.id])
+  }, [])
 
   // Clean up watchers on unmount
   useEffect(() => {
@@ -363,7 +339,6 @@ export default function DriverShift({
     const activeCaddy = activeCaddyRef.current
     if (!activeCaddy || streamingRef.current) return
     streamingRef.current = true
-    setIsStreaming(true)
     saveDutyIntent(true, activeCaddy.id)
 
     // 1. Authenticate and create secure telemetry session token
@@ -385,7 +360,6 @@ export default function DriverShift({
       }
     } catch (err: any) {
       streamingRef.current = false
-      setIsStreaming(false)
       saveDutyIntent(false)
       console.error('Failed to create telemetry session:', err)
       addLog(`[SESSION_ERR] ${err.message || JSON.stringify(err)}`)
@@ -404,7 +378,6 @@ export default function DriverShift({
 
     if (error) {
       streamingRef.current = false
-      setIsStreaming(false)
       saveDutyIntent(false)
       console.error('Failed to start duty:', error)
       return
@@ -527,11 +500,8 @@ export default function DriverShift({
     }, 10000)
   }
 
-  startStreamingRef.current = startStreaming
-
   const stopStreaming = async () => {
     streamingRef.current = false
-    setIsStreaming(false)
     // 1. Clear intervals & watchers
     if (heartbeatIntervalRef.current) {
       clearInterval(heartbeatIntervalRef.current)
@@ -807,23 +777,6 @@ export default function DriverShift({
 
         {/* System parameters indicator badges */}
         <div className="flex items-center gap-2">
-          {/* Tracking Live indicator */}
-          {isDutyRunning && (
-            <button
-              onClick={() => {
-                if (!isStreaming) void startStreaming()
-              }}
-              className={`text-[10px] px-2.5 py-1 rounded-full font-bold flex items-center gap-1.5 transition-all ${
-                isStreaming
-                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse cursor-pointer'
-              }`}
-            >
-              <span className={`w-2 h-2 rounded-full ${isStreaming ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'}`} />
-              {isStreaming ? 'GPS LIVE' : 'RESUME GPS'}
-            </button>
-          )}
-
           {/* Offline/Online signal Status */}
           {isOnline ? (
             <span className="flex items-center gap-1 text-[10px] bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded text-emerald-400 font-bold">
@@ -951,24 +904,14 @@ export default function DriverShift({
       <footer className="bg-slate-900 border-t border-slate-850 p-6 space-y-4 shrink-0 z-45">
         
         <div className="grid grid-cols-2 gap-4">
-          {/* Start Duty / Resume Tracking (Green) */}
+          {/* Start Duty (Green) */}
           <button
-            onClick={async () => {
-              if (!isDutyRunning) {
-                await handleStartDuty()
-              } else if (!isStreaming) {
-                await startStreaming()
-              }
-            }}
-            disabled={isDutyRunning && isStreaming}
-            className={`py-5 ${
-              isDutyRunning && isStreaming 
-                ? 'bg-slate-800 text-emerald-400 border-emerald-500/30 cursor-default' 
-                : 'bg-emerald-500 hover:bg-emerald-600 text-slate-950 animate-pulse'
-            } font-black rounded-3xl shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95 text-sm uppercase tracking-wider border`}
+            onClick={handleStartDuty}
+            disabled={isDutyRunning}
+            className="py-5 bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 hover:bg-emerald-600 text-slate-950 font-black rounded-3xl shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-2 transition-all active:scale-95 text-sm uppercase tracking-wider border border-emerald-400/20"
           >
-            <Play className={`w-5 h-5 ${isDutyRunning && isStreaming ? 'fill-emerald-400' : 'fill-slate-950'}`} />
-            {isDutyRunning ? (isStreaming ? 'Live Tracking' : 'Resume Tracking') : 'Start Duty'}
+            <Play className="w-5 h-5 fill-slate-950" />
+            Start Duty
           </button>
 
           {/* Take Break (Yellow) */}
