@@ -42,15 +42,16 @@ jobs:
             -configuration Release \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            CONFIGURATION_BUILD_DIR=build/Release-iphoneos
 
       - name: Package into IPA
         run: |
-          cd ios/App/build/Release-iphoneos
+          cd build/Release-iphoneos
           mkdir Payload
-          cp -r App.app Payload/
+          cp -R App.app Payload/
           zip -r ShuttleApp.ipa Payload
-          mv ShuttleApp.ipa ../../../../
+          mv ShuttleApp.ipa ../../
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
