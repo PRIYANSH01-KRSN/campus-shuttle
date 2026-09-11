@@ -37,7 +37,7 @@ jobs:
       - name: Build unsigned Xcode project
         run: |
           xcodebuild clean build \
-            -workspace ios/App/App.xcworkspace \
+            -project ios/App/App.xcodeproj \
             -scheme App \
             -configuration Release \
             CODE_SIGN_IDENTITY="" \
