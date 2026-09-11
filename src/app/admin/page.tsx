@@ -15,23 +15,10 @@ export default function AdminPage() {
   const [loggingIn, setLoggingIn] = useState(false)
 
   useEffect(() => {
-    const verifyAdminSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.user) {
-        setIsAdminAuthenticated(false)
-        setLoading(false)
-        return
-      }
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', session.user.id)
-        .maybeSingle()
-      setIsAdminAuthenticated(profile?.role === 'admin')
-      setLoading(false)
-    }
-    void verifyAdminSession()
+    // Force security lock: Do not auto-bypass using persistent session.
+    // The user must explicitly enter admin credentials every time.
+    setIsAdminAuthenticated(false)
+    setLoading(false)
   }, [])
 
   const handleAdminLogin = async (e: React.FormEvent) => {
