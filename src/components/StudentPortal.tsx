@@ -107,6 +107,7 @@ export default function StudentPortal() {
   const [cooldownRemaining, setCooldownRemaining] = useState<number>(0)
   const [showStatusBanner, setShowStatusBanner] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
   
   // Ad State
   const [currentAd, setCurrentAd] = useState<AdBanner | null>(null)
@@ -282,6 +283,7 @@ export default function StudentPortal() {
   const handleRefreshLiveLocation = async () => {
     setIsRefreshing(true)
     await fetchBaseData()
+    setRefreshKey(prev => prev + 1) // Force map remount for instant visual feedback
     setTimeout(() => setIsRefreshing(false), 800) // Small delay so the user sees the spin animation
   }
 
@@ -638,6 +640,7 @@ export default function StudentPortal() {
       {/* 3. Fullscreen Map */}
       <div className="flex-1 w-full min-h-0 relative z-10">
         <StudentMap
+          key={`map-${refreshKey}`}
           mapTheme={mapTheme}
           stations={stations}
           caddies={caddies}
