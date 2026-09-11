@@ -27,7 +27,6 @@ import {
   STALE_MARKER_THRESHOLD_MS,
 } from '@/utils/campusData'
 import { WifiOff, Move } from 'lucide-react'
-import { useInterpolatedCaddyPositions } from '@/hooks/useInterpolatedCaddyPositions'
 
 export interface Station {
   id: string
@@ -150,10 +149,6 @@ export default function AdminMap({
     })
   }, [])
 
-  // Keep this hook above the mounted guard. Calling it only after the first
-  // client render changes the hook order and crashes React's ErrorBoundary.
-  const animatedCaddies = useInterpolatedCaddyPositions(caddies)
-
   if (!mounted) {
     return (
       <div className="w-full h-full min-h-[400px] flex items-center justify-center bg-slate-100 dark:bg-slate-900 rounded-2xl">
@@ -244,7 +239,7 @@ export default function AdminMap({
 
         {/* Caddy Fleet Markers */}
         <MemoizedCaddyMarkers 
-          caddies={animatedCaddies}
+          caddies={caddies}
           routes={routes} 
           getCaddyIcon={getCaddyIcon}
           colors={colors}
