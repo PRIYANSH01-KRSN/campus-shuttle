@@ -866,7 +866,7 @@ export default function StudentPortal() {
                 }}
                 className={`mt-6 w-full rounded-2xl overflow-hidden border ${colors.borderAccent} cursor-pointer group shadow-sm hover:shadow-md transition-shadow bg-black/5 dark:bg-white/5`}
               >
-                <div className="relative h-24 w-full bg-slate-800">
+                <div className="relative aspect-[21/9] w-full bg-slate-800">
                   <img 
                     src={currentAd.image_url} 
                     alt={currentAd.title} 
