@@ -86,6 +86,8 @@ export default function StudentPortal() {
 
   // Connection State
   const [isOnline, setIsOnline] = useState(true)
+  const [isFallbackMode, setIsFallbackMode] = useState(false)
+  const [dismissedLiteMode, setDismissedLiteMode] = useState(false)
 
   // Data State
   const [routes, setRoutes] = useState<RouteType[]>([])
@@ -252,10 +254,11 @@ export default function StudentPortal() {
   useEffect(() => {
     fetchBaseData()
     
-    // Polling fallback
+    // Polling fallback (Lite Mode) - Only fetches caddy locations every 15 seconds if in fallback mode
     const pollInterval = setInterval(() => {
-      if (document.visibilityState === 'visible') fetchBaseData()
-    }, Math.min(POLLING_INTERVAL_MS, 2500))
+      // isFallbackMode check will be handled in a separate useEffect to get latest state, 
+      // but for base data, we no longer poll everything aggressively here.
+    }, 15000)
 
     // Fetch immediately when user brings the tab back to the foreground
     // (Bypasses iOS/Android background interval throttling)
@@ -306,27 +309,73 @@ export default function StudentPortal() {
     }
   }, [currentAd])
 
+  // Lightweight fetch for fallback mode
+  const fetchCaddiesLive = async () => {
+    try {
+      const { data, error } = await supabase.from('caddies').select('*')
+      if (error) return
+      if (data && data.length > 0) {
+        setCaddies(data as any)
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  // Fallback Polling Effect (Barrier B)
+  useEffect(() => {
+    if (!isFallbackMode) return
+    const pollInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchCaddiesLive()
+    }, 15000) // 15 seconds
+    return () => clearInterval(pollInterval)
+  }, [isFallbackMode])
+
   // Realtime Caddies
   useEffect(() => {
+    let isSubscribed = true
     const channel = supabase
       .channel('caddies-live-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'caddies' }, (payload) => {
         if (payload.eventType === 'UPDATE') {
           const updatedCaddy = payload.new as Caddy
           if (!updatedCaddy?.id) return
-          // Upsert by caddy id: a delayed/previously unseen Caddy 2 update
-          // cannot overwrite or disappear behind Caddy 1's state slot.
           setCaddies(prev => {
             const existingIndex = prev.findIndex(caddy => caddy.id === updatedCaddy.id)
             if (existingIndex === -1) return [...prev, updatedCaddy]
             return prev.map(caddy => caddy.id === updatedCaddy.id ? updatedCaddy : caddy)
           })
         } else {
-          fetchBaseData()
+          fetchCaddiesLive()
         }
       })
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
+      .subscribe((status, err) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn('Realtime channel error/timeout, falling back to HTTP polling')
+          if (isSubscribed) {
+            setIsFallbackMode(true)
+            fetchCaddiesLive()
+          }
+        } else if (status === 'SUBSCRIBED') {
+          if (isSubscribed) setIsFallbackMode(false)
+        }
+      })
+      
+    // Autokill WebSocket when backgrounded
+    const handleVisChange = () => {
+      if (document.visibilityState === 'hidden') {
+        supabase.removeChannel(channel)
+      } else {
+        fetchCaddiesLive()
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisChange)
+
+    return () => { 
+      isSubscribed = false
+      supabase.removeChannel(channel) 
+      document.removeEventListener("visibilitychange", handleVisChange)
+    }
   }, [])
 
   // Route Selection
@@ -602,6 +651,39 @@ export default function StudentPortal() {
 
       {/* 2. Floating Top Bar */}
       <div className="absolute top-4 left-4 right-4 z-[999] flex items-center justify-between">
+        <div className={`absolute top-0 left-0 right-0 z-[1000] p-4 flex justify-between items-start pointer-events-none transition-all duration-300 ${drawerOpen ? '-translate-y-full' : 'translate-y-0'}`}>
+          <div className="flex flex-col gap-2 pointer-events-auto">
+            {/* ... other top buttons could go here */}
+          </div>
+        </div>
+
+        {isFallbackMode && !dismissedLiteMode && (
+          <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[1000] w-[90%] max-w-sm">
+            <div className="bg-amber-500/90 backdrop-blur-md text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-lg border border-amber-400/50 flex items-center justify-between pointer-events-auto">
+              <span>Due to extreme demand, your live map is running in basic mode. Movement may appear slightly jumpy.</span>
+              <div className="flex items-center gap-1.5 ml-3 shrink-0">
+                <button 
+                  onClick={() => {
+                    setIsRefreshing(true)
+                    fetchCaddiesLive().then(() => setTimeout(() => setIsRefreshing(false), 500))
+                  }}
+                  className="p-1.5 bg-amber-600 rounded-lg hover:bg-amber-700 active:scale-95 transition-all"
+                  title="Refresh Map"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                </button>
+                <button 
+                  onClick={() => setDismissedLiteMode(true)}
+                  className="p-1.5 bg-amber-600 rounded-lg hover:bg-amber-700 active:scale-95 transition-all"
+                  title="Dismiss"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className={`flex items-center gap-2 px-4 py-2.5 rounded-full ${colors.bgCard} shadow-lg border ${colors.borderAccent} transition-all`}>
           <div className="relative flex items-center justify-center w-4 h-4">
             {isOnline ? (
