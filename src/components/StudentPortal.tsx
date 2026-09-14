@@ -84,10 +84,10 @@ export default function StudentPortal() {
   const [mapTheme, setMapTheme] = useState<MapTheme>('dark')
   const colors = getThemeColors(mapTheme)
 
-  // Connection State
   const [isOnline, setIsOnline] = useState(true)
   const [isFallbackMode, setIsFallbackMode] = useState(false)
   const [dismissedLiteMode, setDismissedLiteMode] = useState(false)
+  const [isTabVisible, setIsTabVisible] = useState(true)
 
   // Data State
   const [routes, setRoutes] = useState<RouteType[]>([])
@@ -263,6 +263,7 @@ export default function StudentPortal() {
     // Fetch immediately when user brings the tab back to the foreground
     // (Bypasses iOS/Android background interval throttling)
     const handleVisibilityChange = () => {
+      setIsTabVisible(document.visibilityState === 'visible')
       if (document.visibilityState === 'visible') {
         fetchBaseData()
       }
@@ -333,6 +334,12 @@ export default function StudentPortal() {
 
   // Realtime Caddies
   useEffect(() => {
+    // Autokill WebSocket when backgrounded: React automatically runs the cleanup function when isTabVisible becomes false.
+    if (!isTabVisible) return
+    
+    // Immediately fetch fresh data upon foregrounding so buses don't "glide" from old positions
+    fetchCaddiesLive()
+
     let isSubscribed = true
     const channel = supabase
       .channel('caddies-live-changes')
@@ -354,29 +361,17 @@ export default function StudentPortal() {
           console.warn('Realtime channel error/timeout, falling back to HTTP polling')
           if (isSubscribed) {
             setIsFallbackMode(true)
-            fetchCaddiesLive()
           }
         } else if (status === 'SUBSCRIBED') {
           if (isSubscribed) setIsFallbackMode(false)
         }
       })
-      
-    // Autokill WebSocket when backgrounded
-    const handleVisChange = () => {
-      if (document.visibilityState === 'hidden') {
-        supabase.removeChannel(channel)
-      } else {
-        fetchCaddiesLive()
-      }
-    }
-    document.addEventListener("visibilitychange", handleVisChange)
 
     return () => { 
       isSubscribed = false
       supabase.removeChannel(channel) 
-      document.removeEventListener("visibilitychange", handleVisChange)
     }
-  }, [])
+  }, [isTabVisible])
 
   // Route Selection
   useEffect(() => {
