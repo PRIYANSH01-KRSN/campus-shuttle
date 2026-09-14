@@ -256,7 +256,7 @@ export default function DriverShift({
     const now = Date.now()
     if (!streamingRef.current || !activeCaddyRef.current) return
 
-    if (now - lastTelemetryPushTimeRef.current <= 2500) {
+    if (now - lastTelemetryPushTimeRef.current <= 4500) {
       addLog(`[TELEMETRY_THROTTLE] Skipped push`)
       return
     }
@@ -405,7 +405,7 @@ export default function DriverShift({
           await BackgroundGeolocation.requestPermissions({ permissions: ['backgroundLocation', 'notification'] })
         }
         const nativeWatchId: CallbackID = await Geolocation.watchPosition(
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 3000, interval: 2500, minimumUpdateInterval: 1000 },
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 3000, interval: 5000, minimumUpdateInterval: 2500 },
           (position, nativeError) => {
             if (nativeError || !position) {
               console.error('Native GPS tracking error:', nativeError)
@@ -426,7 +426,7 @@ export default function DriverShift({
           backgroundTitle: "SNU Caddy Tracker",
           requestPermissions: true,
           stale: false,
-          distanceFilter: 10,
+          distanceFilter: 35,
           minIntervalMs: 10000,
           url: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/rpc/update_caddy_telemetry`,
           headers: {
@@ -623,6 +623,13 @@ export default function DriverShift({
   }
 
   const handleSelectCaddy = async (selected: Caddy) => {
+    // Clean up any other caddies this driver might be assigned to
+    await supabase
+      .from('caddies')
+      .update({ status: 'OFF_DUTY', current_driver_id: null, speed: 0, heading: 0, current_lat: null, current_lng: null })
+      .eq('current_driver_id', profile.id)
+      .neq('id', selected.id)
+
     // If resuming own duty session, preserve status
     const isResumingOwnDuty = selected.current_driver_id === profile.id && selected.status !== 'OFF_DUTY'
 

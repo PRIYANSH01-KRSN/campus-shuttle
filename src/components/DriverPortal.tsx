@@ -90,14 +90,25 @@ export default function DriverPortal() {
     // Restore durable session from localStorage on fresh app launch
     const storedProfileStr = localStorage.getItem('snu-driver-profile')
     const storedCaddyId = localStorage.getItem('snu-driver-caddy-id')
+    const loginTimeStr = localStorage.getItem('snu-driver-login-time')
 
     if (storedProfileStr) {
-      try {
-        const storedProfile = JSON.parse(storedProfileStr)
-        restoreSession(storedProfile, storedCaddyId)
-      } catch (err) {
+      const loginTime = loginTimeStr ? parseInt(loginTimeStr, 10) : 0
+      const isExpired = Date.now() - loginTime > 14 * 60 * 60 * 1000 // 14 hours
+
+      if (isExpired) {
         localStorage.removeItem('snu-driver-profile')
         localStorage.removeItem('snu-driver-caddy-id')
+        localStorage.removeItem('snu-driver-login-time')
+      } else {
+        try {
+          const storedProfile = JSON.parse(storedProfileStr)
+          restoreSession(storedProfile, storedCaddyId)
+        } catch (err) {
+          localStorage.removeItem('snu-driver-profile')
+          localStorage.removeItem('snu-driver-caddy-id')
+          localStorage.removeItem('snu-driver-login-time')
+        }
       }
     }
 
@@ -382,6 +393,7 @@ export default function DriverPortal() {
       
       if (typeof window !== 'undefined') {
         localStorage.setItem('snu-driver-profile', JSON.stringify(profile))
+        localStorage.setItem('snu-driver-login-time', Date.now().toString())
       }
 
       // If this driver is already active on a caddy (e.g. page refresh during shift), resume it directly.
@@ -426,6 +438,7 @@ export default function DriverPortal() {
       sessionStorage.removeItem(`caddy-duty:${driverProfile.id}`)
       localStorage.removeItem('snu-driver-profile')
       localStorage.removeItem('snu-driver-caddy-id')
+      localStorage.removeItem('snu-driver-login-time')
     }
     setDriverProfile(null)
     setAssignedCaddy(null)
