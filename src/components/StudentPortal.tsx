@@ -328,7 +328,7 @@ export default function StudentPortal() {
     if (!isFallbackMode) return
     const pollInterval = setInterval(() => {
       if (document.visibilityState === 'visible') fetchCaddiesLive()
-    }, 15000) // 15 seconds
+    }, 10000) // 10 seconds
     return () => clearInterval(pollInterval)
   }, [isFallbackMode])
 
