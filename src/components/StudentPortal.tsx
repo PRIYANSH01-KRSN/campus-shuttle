@@ -768,7 +768,7 @@ export default function StudentPortal() {
         )}
 
         {/* Floating Route Pills Capsule */}
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[400] bg-white/90 dark:bg-slate-900/90 backdrop-blur-md shadow-lg border border-slate-200/50 dark:border-slate-700/50 rounded-full px-2 py-1.5 flex items-center gap-1.5 w-max max-w-[90vw] overflow-x-auto no-scrollbar">
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[400] bg-white/90 dark:bg-slate-900/90 backdrop-blur-md shadow-lg border border-slate-200/50 dark:border-slate-700/50 rounded-full px-2 py-1.5 flex items-center gap-1.5 w-max max-w-[90vw] overflow-x-auto no-scrollbar md:hidden">
           <button
             onClick={() => setSelectedRouteId(null)}
             className={`shrink-0 px-4 py-1.5 rounded-full text-xs font-bold tracking-wide transition-all shadow-sm ${selectedRouteId === null ? 'bg-teal-500 text-white' : 'bg-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -938,8 +938,9 @@ export default function StudentPortal() {
                   window.open(currentAd.target_url, '_blank', 'noopener,noreferrer')
                   supabase.from('ad_banners').update({ clicks: (currentAd.clicks || 0) + 1 }).eq('id', currentAd.id).then()
                 }}
-                className={`mt-6 w-full rounded-2xl overflow-hidden border ${colors.borderAccent} cursor-pointer group shadow-sm hover:shadow-md transition-shadow bg-black/5 dark:bg-white/5`}
+                className={`mt-6 w-full rounded-2xl overflow-hidden border ${colors.borderAccent} cursor-pointer group shadow-lg hover:shadow-2xl transition-all duration-300 hover:scale-[1.02] bg-gradient-to-br from-black/10 to-transparent dark:from-white/10 relative`}
               >
+                <div className="absolute inset-0 bg-teal-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10"></div>
                 <div className="relative aspect-[21/9] w-full bg-slate-800">
                   <img
                     src={currentAd.image_url}
