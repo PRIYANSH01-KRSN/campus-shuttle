@@ -174,7 +174,7 @@ export default function StudentPortal() {
     const watchId = navigator.geolocation.watchPosition(
       position => setUserLocation([position.coords.latitude, position.coords.longitude]),
       () => undefined,
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 60000 }
     )
     return () => navigator.geolocation.clearWatch(watchId)
   }, [])
@@ -570,7 +570,7 @@ export default function StudentPortal() {
         setGpsLoading(false)
         setTimeout(() => setShowStatusBanner(null), 5000)
       },
-      { enableHighAccuracy: true, timeout: 6000 }
+      { enableHighAccuracy: true, timeout: 30000 }
     )
   }
 
@@ -655,7 +655,7 @@ export default function StudentPortal() {
         {isFallbackMode && !dismissedLiteMode && (
           <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[1000] w-[90%] max-w-sm">
             <div className="bg-amber-500/90 backdrop-blur-md text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-lg border border-amber-400/50 flex items-center justify-between pointer-events-auto">
-              <span>Due to extreme demand, your live map is running in basic mode. Movement may appear slightly jumpy.</span>
+              <span>Live connection unstable, running in basic mode. Movement may appear slightly jumpy.</span>
               <div className="flex items-center gap-1.5 ml-3 shrink-0">
                 <button 
                   onClick={() => {

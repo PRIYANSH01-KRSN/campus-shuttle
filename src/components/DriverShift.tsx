@@ -405,7 +405,7 @@ export default function DriverShift({
           await BackgroundGeolocation.requestPermissions({ permissions: ['backgroundLocation', 'notification'] })
         }
         const nativeWatchId: CallbackID = await Geolocation.watchPosition(
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 3000, interval: 5000, minimumUpdateInterval: 2500 },
+          { enableHighAccuracy: true, timeout: 60000, maximumAge: 3000, interval: 5000, minimumUpdateInterval: 2500 },
           (position, nativeError) => {
             if (nativeError || !position) {
               console.error('Native GPS tracking error:', nativeError)
@@ -475,7 +475,7 @@ export default function DriverShift({
               handleGpsUpdate(pos)
             },
             handleGpsError,
-            { enableHighAccuracy: true, timeout: 15000, maximumAge: 3000 }
+            { enableHighAccuracy: true, timeout: 60000, maximumAge: 3000 }
           )
         }
 
