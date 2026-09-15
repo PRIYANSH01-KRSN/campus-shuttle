@@ -1,3 +1,5 @@
+
+
 'use client'
 
 import React, { useEffect, useState, useRef } from 'react'
@@ -110,7 +112,7 @@ export default function StudentPortal() {
   const [showStatusBanner, setShowStatusBanner] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
-  
+
   // Ad State
   const [currentAd, setCurrentAd] = useState<AdBanner | null>(null)
   const adImpressionTracked = useRef<string | null>(null)
@@ -127,15 +129,15 @@ export default function StudentPortal() {
     if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true) {
       return // Already installed
     }
-    
+
     // Check if it's iOS
     const ua = window.navigator.userAgent
     const ios = !!ua.match(/iPad/i) || !!ua.match(/iPhone/i)
     setIsIOS(ios)
-    
+
     // Check session storage to see if they dismissed it THIS session
     const hiddenThisSession = sessionStorage.getItem('hideInstallPrompt') === 'true'
-    
+
     if (ios && !hiddenThisSession) {
       setShowInstallBanner(true)
     }
@@ -253,7 +255,7 @@ export default function StudentPortal() {
 
   useEffect(() => {
     fetchBaseData()
-    
+
     // Polling fallback (Lite Mode) - Only fetches caddy locations every 15 seconds if in fallback mode
     const pollInterval = setInterval(() => {
       // isFallbackMode check will be handled in a separate useEffect to get latest state, 
@@ -336,7 +338,7 @@ export default function StudentPortal() {
   useEffect(() => {
     // Autokill WebSocket when backgrounded: React automatically runs the cleanup function when isTabVisible becomes false.
     if (!isTabVisible) return
-    
+
     // Immediately fetch fresh data upon foregrounding so buses don't "glide" from old positions
     fetchCaddiesLive()
 
@@ -367,9 +369,9 @@ export default function StudentPortal() {
         }
       })
 
-    return () => { 
+    return () => {
       isSubscribed = false
-      supabase.removeChannel(channel) 
+      supabase.removeChannel(channel)
     }
   }, [isTabVisible])
 
@@ -394,7 +396,7 @@ export default function StudentPortal() {
   // ETA Calculation (Turf.js)
   const calculateCaddyETA = (caddy: Caddy, station: Station) => {
     if (!caddy.current_lat || !caddy.current_lng) return null
-    
+
     const pathObj = routePaths.find(p => p.route_id === station.route_id)
     if (!pathObj || !pathObj.coordinates || pathObj.coordinates.length < 2) {
       const cPt = turf.point([caddy.current_lng, caddy.current_lat])
@@ -407,10 +409,10 @@ export default function StudentPortal() {
 
     const pathCoords = pathObj.coordinates as LatLng[]
     const turfLine = turf.lineString(pathCoords.map(c => [c[1], c[0]]))
-    
+
     const caddyPt = turf.point([caddy.current_lng, caddy.current_lat])
     const stationPt = turf.point([station.lng, station.lat])
-    
+
     const snappedCaddy = turf.nearestPointOnLine(turfLine, caddyPt)
     const snappedStation = turf.nearestPointOnLine(turfLine, stationPt)
 
@@ -471,10 +473,10 @@ export default function StudentPortal() {
     return { distance: roadDistanceMeters, eta: totalETAMins }
   }
 
-  const activeCaddiesList = caddies.filter(c => 
-    c.status === 'ON_DUTY' && 
-    c.current_lat && 
-    c.current_lng && 
+  const activeCaddiesList = caddies.filter(c =>
+    c.status === 'ON_DUTY' &&
+    c.current_lat &&
+    c.current_lng &&
     // eslint-disable-next-line react-hooks/purity
     (Date.now() - new Date(c.last_ping).getTime() < STALE_THRESHOLD_MS)
   )
@@ -561,7 +563,7 @@ export default function StudentPortal() {
         } else {
           setShowStatusBanner({ type: 'error', text: `Request failed: ${error.message}` })
         }
-        
+
         setGpsLoading(false)
         setTimeout(() => setShowStatusBanner(null), 5000)
       },
@@ -580,34 +582,33 @@ export default function StudentPortal() {
     return `${mins}m ${secs}s`
   }
 
-    const handleInstallClick = async () => {
-      if (isIOS) {
-        alert("To install on iOS: Tap the Share button below and select 'Add to Home Screen'")
-        return
-      }
-      if (deferredPrompt) {
-        deferredPrompt.prompt()
-        const { outcome } = await deferredPrompt.userChoice
-        if (outcome === 'accepted') {
-          setDeferredPrompt(null)
-          setShowInstallBanner(false)
-        }
+  const handleInstallClick = async () => {
+    if (isIOS) {
+      alert("To install on iOS: Tap the Share button below and select 'Add to Home Screen'")
+      return
+    }
+    if (deferredPrompt) {
+      deferredPrompt.prompt()
+      const { outcome } = await deferredPrompt.userChoice
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null)
+        setShowInstallBanner(false)
       }
     }
+  }
 
-    const handleDismissInstall = () => {
-      setShowInstallBanner(false)
-      sessionStorage.setItem('hideInstallPrompt', 'true')
-    }
+  const handleDismissInstall = () => {
+    setShowInstallBanner(false)
+    sessionStorage.setItem('hideInstallPrompt', 'true')
+  }
 
   return (
     <div className={`w-full h-screen ${colors.bg} flex flex-col overflow-hidden relative select-none`}>
-      
+
       {/* PWA Install Banner */}
       {showInstallBanner && (
-        <div className={`absolute top-20 left-4 right-4 z-[9999] p-3 rounded-2xl border shadow-xl flex items-center justify-between gap-3 backdrop-blur-xl ${
-          mapTheme === 'dark' ? 'bg-black/60 border-white/10' : 'bg-white/80 border-slate-200'
-        }`}>
+        <div className={`absolute top-20 left-4 right-4 z-[9999] p-3 rounded-2xl border shadow-xl flex items-center justify-between gap-3 backdrop-blur-xl ${mapTheme === 'dark' ? 'bg-black/60 border-white/10' : 'bg-white/80 border-slate-200'
+          }`}>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-black dark:bg-white flex items-center justify-center shrink-0">
               <Bus className="w-6 h-6 text-white dark:text-black" />
@@ -618,7 +619,7 @@ export default function StudentPortal() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button 
+            <button
               onClick={handleInstallClick}
               className="px-4 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition-transform active:scale-95"
             >
@@ -626,7 +627,7 @@ export default function StudentPortal() {
             </button>
             <button onClick={handleDismissInstall} className={`p-1 rounded-full ${colors.textMuted} hover:bg-black/5`}>
               <span className="sr-only">Dismiss</span>
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
             </button>
           </div>
         </div>
@@ -634,11 +635,10 @@ export default function StudentPortal() {
 
       {/* 1. Status Banner */}
       {showStatusBanner && (
-        <div className={`absolute top-20 left-4 right-4 z-[9999] p-3 rounded-xl border shadow-xl flex items-center gap-3 backdrop-blur-md animate-bounce ${
-          showStatusBanner.type === 'success' 
-            ? 'bg-emerald-500/90 border-emerald-400 text-white' 
-            : 'bg-rose-500/90 border-rose-400 text-white'
-        }`}>
+        <div className={`absolute top-20 left-4 right-4 z-[9999] p-3 rounded-xl border shadow-xl flex items-center gap-3 backdrop-blur-md animate-bounce ${showStatusBanner.type === 'success'
+          ? 'bg-emerald-500/90 border-emerald-400 text-white'
+          : 'bg-rose-500/90 border-rose-400 text-white'
+          }`}>
           {showStatusBanner.type === 'success' ? <CheckCircle2 className="w-5 h-5 shrink-0" /> : <AlertCircle className="w-5 h-5 shrink-0" />}
           <span className="text-sm font-semibold">{showStatusBanner.text}</span>
         </div>
@@ -657,7 +657,7 @@ export default function StudentPortal() {
             <div className="bg-amber-500/90 backdrop-blur-md text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-lg border border-amber-400/50 flex items-center justify-between pointer-events-auto">
               <span>Live connection unstable, running in basic mode. Movement may appear slightly jumpy.</span>
               <div className="flex items-center gap-1.5 ml-3 shrink-0">
-                <button 
+                <button
                   onClick={() => {
                     setIsRefreshing(true)
                     fetchCaddiesLive().then(() => setTimeout(() => setIsRefreshing(false), 500))
@@ -667,12 +667,12 @@ export default function StudentPortal() {
                 >
                   <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
                 </button>
-                <button 
+                <button
                   onClick={() => setDismissedLiteMode(true)}
                   className="p-1.5 bg-amber-600 rounded-lg hover:bg-amber-700 active:scale-95 transition-all"
                   title="Dismiss"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
                 </button>
               </div>
             </div>
@@ -747,7 +747,7 @@ export default function StudentPortal() {
           mapRef={mapRef}
           userLocation={userLocation}
         />
-        
+
         {/* Empty State Overlay */}
         {activeCaddiesList.length === 0 && (
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-[900]">
@@ -756,7 +756,7 @@ export default function StudentPortal() {
               <div className="flex items-center gap-2 relative group cursor-help">
                 <span className={`text-sm font-bold ${colors.text}`}>No caddies currently on active duty</span>
                 <Info className={`w-4 h-4 ${colors.textMuted}`} />
-                
+
                 {/* Tooltip */}
                 <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-56 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 text-xs p-2.5 rounded-xl text-center shadow-lg z-50">
                   If shuttles are currently running, drivers may need to enable location sharing on their device.
@@ -771,9 +771,8 @@ export default function StudentPortal() {
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[400] bg-white/90 dark:bg-slate-900/90 backdrop-blur-md shadow-lg border border-slate-200/50 dark:border-slate-700/50 rounded-full px-2 py-1.5 flex items-center gap-1.5 w-max max-w-[90vw] overflow-x-auto no-scrollbar">
           <button
             onClick={() => setSelectedRouteId(null)}
-            className={`shrink-0 px-4 py-1.5 rounded-full text-xs font-bold tracking-wide transition-all shadow-sm ${
-              selectedRouteId === null ? 'bg-teal-500 text-white' : 'bg-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
+            className={`shrink-0 px-4 py-1.5 rounded-full text-xs font-bold tracking-wide transition-all shadow-sm ${selectedRouteId === null ? 'bg-teal-500 text-white' : 'bg-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
           >
             All
           </button>
@@ -781,9 +780,8 @@ export default function StudentPortal() {
             <button
               key={route.id}
               onClick={() => setSelectedRouteId(route.id)}
-              className={`shrink-0 px-4 py-1.5 rounded-full text-xs font-bold tracking-wide transition-all shadow-sm flex items-center gap-2 ${
-                selectedRouteId === route.id ? 'bg-teal-500 text-white' : 'bg-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-              }`}
+              className={`shrink-0 px-4 py-1.5 rounded-full text-xs font-bold tracking-wide transition-all shadow-sm flex items-center gap-2 ${selectedRouteId === route.id ? 'bg-teal-500 text-white' : 'bg-transparent text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
             >
               <span className="w-2.5 h-2.5 rounded-full shadow-sm" style={{ backgroundColor: route.color }}></span>
               {route.name}
@@ -810,12 +808,11 @@ export default function StudentPortal() {
 
       {/* 5. Bottom UI Area */}
       <div className="absolute bottom-0 left-0 right-0 z-[1000] flex flex-col items-center pointer-events-none">
-        
+
         {/* Bottom Sheet */}
-        <div className={`w-full ${colors.bgSheet} border-t ${colors.borderAccent} shadow-[0_-10px_40px_rgba(0,0,0,0.2)] rounded-t-3xl bottom-sheet flex flex-col pointer-events-auto ${
-          drawerOpen ? 'translate-y-0' : 'translate-y-[calc(100%-72px)]'
-        }`}>
-          
+        <div className={`w-full max-w-md md:mb-4 md:border md:rounded-3xl ${colors.bgSheet} border-t ${colors.borderAccent} shadow-[0_-10px_40px_rgba(0,0,0,0.2)] rounded-t-3xl bottom-sheet flex flex-col pointer-events-auto ${drawerOpen ? 'translate-y-0 md:translate-y-0' : 'translate-y-[calc(100%-72px)]'
+          }`}>
+
           <div onClick={() => setDrawerOpen(!drawerOpen)} className="w-full py-4 flex flex-col items-center justify-center cursor-pointer">
             <div className="bottom-sheet-handle mb-3"></div>
             {!drawerOpen && (
@@ -829,7 +826,7 @@ export default function StudentPortal() {
           <div className="px-6 pb-8 flex-1 overflow-y-auto">
             {selectedStation ? (
               <div className="space-y-6">
-                
+
                 {/* Station Header */}
                 <div className="flex justify-between items-start">
                   <div>
@@ -839,7 +836,7 @@ export default function StudentPortal() {
                         Stop {selectedStation.stop_order}
                       </span>
                       {routes.find(r => r.id === selectedStation.route_id) && (
-                        <span 
+                        <span
                           className="text-xs px-2 py-1 rounded-md font-bold text-white shadow-sm"
                           style={{ backgroundColor: routes.find(r => r.id === selectedStation.route_id)?.color }}
                         >
@@ -920,9 +917,9 @@ export default function StudentPortal() {
                   <div className={`px-3 py-1.5 rounded-xl text-xs font-bold ${
                     // eslint-disable-next-line react-hooks/purity
                     Date.now() - new Date(selectedCaddy.last_ping).getTime() > (STALE_MARKER_THRESHOLD_MS || 300000)
-                      ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20' 
+                      ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
                       : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
-                  }`}>
+                    }`}>
                     {/* eslint-disable-next-line react-hooks/purity */}
                     {Date.now() - new Date(selectedCaddy.last_ping).getTime() > (STALE_MARKER_THRESHOLD_MS || 300000) ? 'Signal Lost' : 'Live'}
                   </div>
@@ -936,7 +933,7 @@ export default function StudentPortal() {
 
             {/* Ad Banner */}
             {currentAd && (
-              <div 
+              <div
                 onClick={() => {
                   window.open(currentAd.target_url, '_blank', 'noopener,noreferrer')
                   supabase.from('ad_banners').update({ clicks: (currentAd.clicks || 0) + 1 }).eq('id', currentAd.id).then()
@@ -944,9 +941,9 @@ export default function StudentPortal() {
                 className={`mt-6 w-full rounded-2xl overflow-hidden border ${colors.borderAccent} cursor-pointer group shadow-sm hover:shadow-md transition-shadow bg-black/5 dark:bg-white/5`}
               >
                 <div className="relative aspect-[21/9] w-full bg-slate-800">
-                  <img 
-                    src={currentAd.image_url} 
-                    alt={currentAd.title} 
+                  <img
+                    src={currentAd.image_url}
+                    alt={currentAd.title}
                     className="w-full h-full object-cover"
                     onError={(e) => {
                       (e.target as HTMLImageElement).src = 'https://via.placeholder.com/600x200?text=Sponsor+Banner'
