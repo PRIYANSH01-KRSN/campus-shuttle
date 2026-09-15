@@ -810,7 +810,7 @@ export default function StudentPortal() {
       <div className="absolute bottom-0 left-0 right-0 z-[1000] flex flex-col items-center pointer-events-none">
 
         {/* Bottom Sheet */}
-        <div className={`w-full max-w-md md:mb-4 md:border md:rounded-3xl ${colors.bgSheet} border-t ${colors.borderAccent} shadow-[0_-10px_40px_rgba(0,0,0,0.2)] rounded-t-3xl bottom-sheet flex flex-col pointer-events-auto ${drawerOpen ? 'translate-y-0 md:translate-y-0' : 'translate-y-[calc(100%-72px)]'
+        <div className={`w-full max-w-md max-h-[85vh] md:max-h-[70vh] md:mb-4 md:border md:rounded-3xl ${colors.bgSheet} border-t ${colors.borderAccent} shadow-[0_-10px_40px_rgba(0,0,0,0.2)] rounded-t-3xl bottom-sheet flex flex-col pointer-events-auto ${drawerOpen ? 'translate-y-0 md:translate-y-0' : 'translate-y-[calc(100%-72px)]'
           }`}>
 
           <div onClick={() => setDrawerOpen(!drawerOpen)} className="w-full py-4 flex flex-col items-center justify-center cursor-pointer">
