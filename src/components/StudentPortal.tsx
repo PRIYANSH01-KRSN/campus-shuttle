@@ -679,6 +679,17 @@ export default function StudentPortal() {
           </div>
         )}
 
+        {activeCaddiesList.length > 0 && activeCaddiesList.length < caddies.length && (
+          <div className="absolute top-[4.5rem] left-1/2 -translate-x-1/2 z-[990] w-max max-w-[90%] pointer-events-auto text-center">
+            <div className={`px-3 py-1.5 rounded-full shadow-md border backdrop-blur-md flex items-center gap-1.5 ${colors.bgCard} ${colors.borderAccent}`}>
+              <Info className={`w-3.5 h-3.5 shrink-0 ${colors.textMuted}`} />
+              <span className={`text-[10px] sm:text-xs font-medium ${colors.textMuted}`}>
+                If a caddy isn't showing, ask the driver to turn on the app. There is no bug.
+              </span>
+            </div>
+          </div>
+        )}
+
         <div className={`flex items-center gap-2 px-4 py-2.5 rounded-full ${colors.bgCard} shadow-lg border ${colors.borderAccent} transition-all`}>
           <div className="relative flex items-center justify-center w-4 h-4">
             {isOnline ? (
