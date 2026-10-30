@@ -25,6 +25,14 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Hide dev overlay badge during demo recordings */
+nextjs-portal,
+[data-nextjs-toast],
+[data-nextjs-dialog-overlay],
+[data-nextjs-dev-tools-button] {
+  display: none !important;
+}
+
 /* Leaflet Map Styles */
 .leaflet-container {
   width: 100%;
